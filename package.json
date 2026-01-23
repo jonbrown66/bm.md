@@ -3,17 +3,20 @@
   "type": "module",
   "version": "0.1.0",
   "private": true,
-  "packageManager": "pnpm@10.28.0",
+  "packageManager": "bun@1.2.1",
   "scripts": {
-    "dev": "vite dev --port 2663",
-    "build": "pnpm openapi:generate && vite build",
-    "openapi:generate": "tsx --import ./scripts/ignore-css/register.mjs scripts/generate-openapi.ts",
-    "preview": "vite preview",
-    "test": "vitest run",
-    "lint": "eslint",
-    "lint:fix": "eslint --fix",
-    "shadcn": "shadcn",
-    "prepare": "simple-git-hooks"
+    "dev": "bunx vite dev --port 2663",
+    "build": "bun run openapi:generate && bunx vite build",
+    "openapi:generate": "bun run scripts/generate-openapi.ts",
+    "preview": "bunx vite preview",
+    "test": "bunx vitest run",
+    "lint": "bunx eslint",
+    "lint:fix": "bunx eslint --fix",
+    "shadcn": "bunx shadcn",
+    "prepare": "bunx simple-git-hooks"
+  },
+  "dependencies": {
+    "mermaid": "^11.12.2"
   },
   "devDependencies": {
     "@antfu/eslint-config": "^6.7.3",
@@ -136,8 +139,14 @@
     "zod": "^4.3.5",
     "zustand": "^5.0.10"
   },
+  "overrides": {
+    "@codemirror/commands": "^6.10.1",
+    "@codemirror/language": "^6.12.1",
+    "@codemirror/state": "^6.5.3",
+    "@codemirror/view": "^6.39.9"
+  },
   "simple-git-hooks": {
-    "pre-commit": "pnpm lint-staged"
+    "pre-commit": "bunx lint-staged"
   },
   "lint-staged": {
     "*": "eslint --fix"

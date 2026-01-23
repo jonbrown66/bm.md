@@ -1,16 +1,21 @@
 import { debounce } from 'es-toolkit'
+import mermaid from 'mermaid'
 import morphdom from 'morphdom'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { usePreviewScrollSync } from '@/components/markdown/hooks/use-scroll-sync'
 import { Phone } from '@/components/mockups/iphone'
 import { Safari } from '@/components/mockups/safari'
+import { mermaidConfig } from '@/config/mermaid'
 import { getMarkdownLocaleTexts } from '@/lib/locale'
 import { useEditorStore } from '@/stores/editor'
 import { useFilesStore } from '@/stores/files'
 import { PREVIEW_WIDTH_MOBILE, usePreviewStore } from '@/stores/preview'
+
 import iframeShell from './iframe-shell.html?raw'
 
 const RENDER_DEBOUNCE_MS = 100
+
+mermaid.initialize(mermaidConfig)
 
 export default function MarkdownRender() {
   const content = useFilesStore(state => state.currentContent)
@@ -58,7 +63,39 @@ export default function MarkdownRender() {
         }
         return true
       },
+      onElUpdated(el) {
+        if (el.classList.contains('mermaid')) {
+          el.removeAttribute('data-processed')
+        }
+      },
     })
+
+    const nodes = Array.from(body.querySelectorAll('.mermaid:not([data-processed="true"])')) as HTMLElement[]
+    if (nodes.length > 0) {
+      Promise.all(nodes.map(async (node, index) => {
+        try {
+          const id = `mermaid-${Date.now()}-${index}`
+          const text = node.textContent || ''
+          const { svg } = await mermaid.render(id, text)
+          node.innerHTML = svg
+          node.setAttribute('data-processed', 'true')
+        }
+        catch (error) {
+          console.error('Mermaid render error:', error)
+          node.innerHTML = `<p class="text-red-500 font-mono text-sm p-2 bg-red-50 rounded">${error instanceof Error ? error.message : String(error)}</p>`
+        }
+      })).then(() => {
+        const iframeDoc = iframe.contentDocument
+        if (iframeDoc) {
+          const parentStyles = document.querySelectorAll('style[id^="mermaid"]')
+          parentStyles.forEach((style) => {
+            if (!iframeDoc.head.querySelector(`style[id="${style.id}"]`)) {
+              iframeDoc.head.appendChild(style.cloneNode(true))
+            }
+          })
+        }
+      })
+    }
   }, [iframeRef])
 
   const onIframeLoad = useCallback(() => {
@@ -71,9 +108,33 @@ export default function MarkdownRender() {
       pendingHtmlRef.current = null
     }
 
-    // 拦截 iframe 内的链接点击
     const iframeDoc = iframeRef.current?.contentDocument
     if (iframeDoc) {
+      // 首次加载渲染 Mermaid
+      const nodes = Array.from(iframeDoc.querySelectorAll('.mermaid:not([data-processed="true"])')) as HTMLElement[]
+      if (nodes.length > 0) {
+        Promise.all(nodes.map(async (node, index) => {
+          try {
+            const id = `mermaid-init-${Date.now()}-${index}`
+            const text = node.textContent || ''
+            const { svg } = await mermaid.render(id, text)
+            node.innerHTML = svg
+            node.setAttribute('data-processed', 'true')
+          }
+          catch (error) {
+            console.error('Mermaid render error:', error)
+            node.innerHTML = `<p class="text-red-500 font-mono text-sm p-2 bg-red-50 rounded">${error instanceof Error ? error.message : String(error)}</p>`
+          }
+        })).then(() => {
+          const parentStyles = document.querySelectorAll('style[id^="mermaid"]')
+          parentStyles.forEach((style) => {
+            if (!iframeDoc.head.querySelector(`style[id="${style.id}"]`)) {
+              iframeDoc.head.appendChild(style.cloneNode(true))
+            }
+          })
+        })
+      }
+
       iframeDoc.addEventListener('click', (e: MouseEvent) => {
         const link = (e.target as HTMLElement).closest('a')
         if (!link)
@@ -85,7 +146,6 @@ export default function MarkdownRender() {
 
         e.preventDefault()
 
-        // 页内锚点跳转（脚注引用、返回链接等）
         if (href.startsWith('#')) {
           let targetHref = href
           if (href.includes('-fnref-')) {
@@ -101,7 +161,6 @@ export default function MarkdownRender() {
           return
         }
 
-        // 外部链接 - 顶层窗口新开标签页
         window.open(href, '_blank', 'noopener')
       })
     }
@@ -174,7 +233,7 @@ export default function MarkdownRender() {
       id="bm-preview-iframe"
       title="markdown preview"
       className="h-full w-full border-0"
-      sandbox="allow-same-origin allow-modals"
+      sandbox="allow-same-origin allow-modals allow-scripts"
       srcDoc={iframeShell}
       onLoad={onIframeLoad}
     />

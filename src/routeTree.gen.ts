@@ -65,11 +65,11 @@ const LayoutDocsMcpRoute = LayoutDocsMcpRouteImport.update({
 } as any)
 
 export interface FileRoutesByFullPath {
+  '/': typeof LayoutIndexRoute
   '/docs': typeof DocsRoute
   '/mcp': typeof McpRoute
   '/about': typeof LayoutAboutRoute
   '/api/$': typeof ApiSplatRoute
-  '/': typeof LayoutIndexRoute
   '/docs/mcp': typeof LayoutDocsMcpRoute
   '/docs/skill': typeof LayoutDocsSkillRoute
   '/api/upload/image': typeof ApiUploadImageRoute
@@ -99,11 +99,11 @@ export interface FileRoutesById {
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
+    | '/'
     | '/docs'
     | '/mcp'
     | '/about'
     | '/api/$'
-    | '/'
     | '/docs/mcp'
     | '/docs/skill'
     | '/api/upload/image'
@@ -157,7 +157,7 @@ declare module '@tanstack/react-router' {
     '/_layout': {
       id: '/_layout'
       path: ''
-      fullPath: ''
+      fullPath: '/'
       preLoaderRoute: typeof LayoutRouteImport
       parentRoute: typeof rootRouteImport
     }

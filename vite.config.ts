@@ -116,6 +116,14 @@ const config = defineConfig({
     }),
   ],
   resolve: {
+    dedupe: [
+      '@codemirror/state',
+      '@codemirror/view',
+      '@codemirror/language',
+      '@codemirror/commands',
+      'react',
+      'react-dom',
+    ],
     alias: {
       'decode-named-character-reference': require.resolve('decode-named-character-reference'),
       'hast-util-from-html-isomorphic': require.resolve('hast-util-from-html-isomorphic'),

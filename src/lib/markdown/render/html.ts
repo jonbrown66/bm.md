@@ -18,7 +18,7 @@ import { loadCodeThemeCss } from '@/themes/code-theme/loader'
 import { loadMarkdownStyleCss } from '@/themes/markdown-style/loader'
 import { loadKatexCss } from '../utils'
 import { getAdapterPlugins } from './adapters'
-import { rehypeDivToSection, rehypeFigureWrapper, rehypeFootnoteLinks, rehypeWrapTextNodes, remarkFrontmatterTable } from './plugins'
+import { rehypeDivToSection, rehypeFigureWrapper, rehypeFootnoteLinks, rehypeWrapTextNodes, remarkFrontmatterTable, remarkMermaid } from './plugins'
 
 export interface RenderOptions {
   markdown: string
@@ -56,7 +56,7 @@ const sanitizeSchema = {
   attributes: {
     ...defaultSchema.attributes,
     a: [...(defaultSchema.attributes?.a || []), 'target', 'rel'],
-    div: [...(defaultSchema.attributes?.div || []), 'className'],
+    div: [...(defaultSchema.attributes?.div || []), 'className', 'id'],
     section: [...(defaultSchema.attributes?.section || []), 'className'],
     p: [...(defaultSchema.attributes?.p || []), 'className'],
     svg: ['className', 'viewBox', 'version', 'width', 'height', 'ariaHidden'],
@@ -69,6 +69,7 @@ function createProcessor({ enableFootnoteLinks, openLinksInNewWindow, platform =
     .use(remarkParse)
     .use(remarkGfm)
     .use(remarkMath)
+    .use(remarkMermaid)
     .use(remarkFrontmatter, ['yaml', 'toml'])
     .use(remarkFrontmatterTable)
     .use(remarkRehype, {

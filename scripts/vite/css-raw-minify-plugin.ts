@@ -6,27 +6,30 @@ export function cssRawMinifyPlugin(): Plugin {
   return {
     name: 'css-raw-minify',
     enforce: 'pre',
-    transform(code, id) {
+    async transform(code, id) {
       if (!id.endsWith('.css?raw'))
         return
 
-      // Vite 已将内容转换为 export default "..."，需要提取原始 CSS
-      const match = code.match(/^export default "([\s\S]*)"/m)
-      if (!match)
+      const exportDefaultMatch = code.match(/^export default ("[\s\S]*")/m)
+      if (!exportDefaultMatch)
         return
 
-      // 解码转义字符
-      const css = match[1].replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\')
+      try {
+        const css = JSON.parse(exportDefaultMatch[1])
 
-      const { code: minified } = transform({
-        filename: id.replace('?raw', ''),
-        code: Buffer.from(css),
-        minify: true,
-      })
+        const { code: minified } = transform({
+          filename: id.replace('?raw', ''),
+          code: Buffer.from(css),
+          minify: true,
+        })
 
-      return {
-        code: `export default ${JSON.stringify(minified.toString())}`,
-        map: null,
+        return {
+          code: `export default ${JSON.stringify(minified.toString())}`,
+          map: null,
+        }
+      }
+      catch (e) {
+        console.error(`[css-raw-minify] Failed to minify ${id}:`, e)
       }
     },
   }
