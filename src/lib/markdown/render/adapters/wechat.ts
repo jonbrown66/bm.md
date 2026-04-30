@@ -208,11 +208,12 @@ const rehypeWechatCodeWhitespace: Plugin<[], Root> = () => (tree) => {
 }
 
 interface WechatFootnoteLinkOptions {
+  enableFootnoteLinks?: boolean
   referenceTitle?: string
 }
 
 const rehypeWechatFootnoteLinks: Plugin<[WechatFootnoteLinkOptions?], Root> = (options = {}) => {
-  const { referenceTitle = 'References' } = options
+  const { enableFootnoteLinks = true, referenceTitle = 'References' } = options
 
   return (tree) => {
     const links: FootnoteLink[] = []
@@ -258,6 +259,10 @@ const rehypeWechatFootnoteLinks: Plugin<[WechatFootnoteLinkOptions?], Root> = (o
       delete node.properties?.rel
 
       if (shouldSkipFootnote(href)) {
+        return
+      }
+
+      if (!enableFootnoteLinks) {
         return
       }
 
@@ -323,9 +328,17 @@ const rehypeWechatFootnoteLinks: Plugin<[WechatFootnoteLinkOptions?], Root> = (o
 export const wechatAdapter: PlatformAdapter = {
   id: 'wechat',
   name: '微信公众号',
-  getPlugins: options => [
-    rehypeWechatListNormalize,
-    rehypeWechatCodeWhitespace,
-    [rehypeWechatFootnoteLinks, { referenceTitle: options?.referenceTitle }],
-  ],
+  getPlugins: (options) => {
+    return [
+      rehypeWechatListNormalize,
+      rehypeWechatCodeWhitespace,
+      [
+        rehypeWechatFootnoteLinks,
+        {
+          enableFootnoteLinks: options?.enableFootnoteLinks,
+          referenceTitle: options?.referenceTitle,
+        },
+      ],
+    ]
+  },
 }

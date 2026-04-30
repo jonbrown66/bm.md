@@ -1,6 +1,5 @@
 import type { IconName } from '@/lib/actions'
 import type { EditorBooleanKey, EditorBooleanSetterKey } from '@/stores/editor'
-import { appConfig } from './app'
 
 // ========== 类型定义 ==========
 
@@ -93,6 +92,10 @@ export const editorCommandConfig = {
     icon: 'Wand' as IconName,
     hotkey: { key: 'l', shift: true },
   },
+  uploadImages: {
+    label: '一键上传图片',
+    icon: 'CloudUpload' as IconName,
+  },
   exportImage: {
     label: '导出图片',
     icon: 'ImageDown' as IconName,
@@ -160,9 +163,6 @@ export const navigationConfig = {
   ] as const satisfies readonly InternalNavItem[],
   external: [
     { url: '/docs', label: 'API 文档', icon: 'BookOpen' },
-    { url: 'https://404.li/x', label: 'Twitter', icon: 'Twitter' },
-    { url: appConfig.github, label: 'GitHub', icon: 'Github' },
-    { url: 'https://404.li/coffee', label: '请喝咖啡', icon: 'Coffee' },
   ] as const satisfies readonly ExternalNavItem[],
 }
 

@@ -5,6 +5,7 @@ export const platforms = ['html', 'wechat', 'zhihu', 'juejin'] as const
 export type Platform = typeof platforms[number]
 
 export interface AdapterOptions {
+  enableFootnoteLinks?: boolean
   referenceTitle?: string
 }
 

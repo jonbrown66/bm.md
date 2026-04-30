@@ -1,12 +1,10 @@
 import { ClientOnly } from '@tanstack/react-router'
 import { lazy, useEffect, useRef } from 'react'
-import { PREVIEW_WIDTH_MOBILE, usePreviewStore } from '@/stores/preview'
+import { usePreviewStore } from '@/stores/preview'
 import { PreviewerFallback } from './fallback'
 import MarkdownPreviewerSidebar from './sidebar'
 
 const MarkdownRender = lazy(() => import('./render'))
-
-const MOBILE_BREAKPOINT = 600
 
 export default function MarkdownPreviewer() {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -25,12 +23,8 @@ export default function MarkdownPreviewer() {
       if (!width)
         return
 
-      const targetWidth = width < MOBILE_BREAKPOINT
-        ? PREVIEW_WIDTH_MOBILE
-        : userPreferredWidth
-
-      if (targetWidth !== previewWidth) {
-        setPreviewWidth(targetWidth)
+      if (userPreferredWidth !== previewWidth) {
+        setPreviewWidth(userPreferredWidth)
       }
     })
 

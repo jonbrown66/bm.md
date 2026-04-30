@@ -44,6 +44,7 @@ import {
   handleImportFiles,
   printPreview,
   toggleTheme,
+  uploadMarkdownImages,
 } from '@/lib/actions'
 import { trackEvent } from '@/lib/analytics'
 import { useCommandPaletteStore } from '@/stores/command-palette'
@@ -136,6 +137,12 @@ export function CommandPalette() {
     closePanel()
     trackEvent('editor', 'format', 'menu')
     await formatMarkdown(content, setContent)
+  }, [closePanel, content, setContent])
+
+  const handleUploadImages = useCallback(async () => {
+    closePanel()
+    trackEvent('editor', 'upload_images', 'menu')
+    await uploadMarkdownImages(content, setContent)
   }, [closePanel, content, setContent])
 
   const handleOpenResetDialog = useCallback(() => {
@@ -232,6 +239,7 @@ export function CommandPalette() {
     const ImportIcon = getIcon(editorCommandConfig.import.icon)
     const ExportIcon = getIcon(editorCommandConfig.export.icon)
     const FormatIcon = getIcon(editorCommandConfig.format.icon)
+    const UploadImagesIcon = getIcon(editorCommandConfig.uploadImages.icon)
     const ExportImageIcon = getIcon(editorCommandConfig.exportImage.icon)
     const CopyImageIcon = getIcon(editorCommandConfig.copyImage.icon)
     const ExportPdfIcon = getIcon(editorCommandConfig.exportPdf.icon)
@@ -261,6 +269,10 @@ export function CommandPalette() {
             {FormatIcon && <FormatIcon className="size-4" />}
             {editorCommandConfig.format.label}
             <HotkeyShortcut hotkey={editorCommandConfig.format.hotkey} />
+          </CommandItem>
+          <CommandItem onSelect={handleUploadImages}>
+            {UploadImagesIcon && <UploadImagesIcon className="size-4" />}
+            {editorCommandConfig.uploadImages.label}
           </CommandItem>
           <CommandItem onSelect={handleOpenResetDialog}>
             <RotateCcw className="size-4" />

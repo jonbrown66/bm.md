@@ -97,7 +97,7 @@ function createProcessor({ enableFootnoteLinks, openLinksInNewWindow, platform =
     processor.use(rehypeFootnoteLinks, { referenceTitle })
   }
 
-  const adapterPlugins = getAdapterPlugins(platform, { referenceTitle })
+  const adapterPlugins = getAdapterPlugins(platform, { enableFootnoteLinks, referenceTitle })
   for (const plugin of adapterPlugins) {
     if (Array.isArray(plugin)) {
       processor.use(plugin[0] as Plugin, plugin[1])

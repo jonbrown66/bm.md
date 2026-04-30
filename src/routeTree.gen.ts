@@ -15,6 +15,7 @@ import { Route as LayoutRouteImport } from './routes/_layout'
 import { Route as LayoutIndexRouteImport } from './routes/_layout.index'
 import { Route as ApiSplatRouteImport } from './routes/api.$'
 import { Route as LayoutAboutRouteImport } from './routes/_layout.about'
+import { Route as ApiUploadRemoteImagesRouteImport } from './routes/api.upload.remote-images'
 import { Route as ApiUploadImageRouteImport } from './routes/api.upload.image'
 import { Route as LayoutDocsSkillRouteImport } from './routes/_layout.docs.skill'
 import { Route as LayoutDocsMcpRouteImport } from './routes/_layout.docs.mcp'
@@ -48,6 +49,11 @@ const LayoutAboutRoute = LayoutAboutRouteImport.update({
   path: '/about',
   getParentRoute: () => LayoutRoute,
 } as any)
+const ApiUploadRemoteImagesRoute = ApiUploadRemoteImagesRouteImport.update({
+  id: '/api/upload/remote-images',
+  path: '/api/upload/remote-images',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiUploadImageRoute = ApiUploadImageRouteImport.update({
   id: '/api/upload/image',
   path: '/api/upload/image',
@@ -73,6 +79,7 @@ export interface FileRoutesByFullPath {
   '/docs/mcp': typeof LayoutDocsMcpRoute
   '/docs/skill': typeof LayoutDocsSkillRoute
   '/api/upload/image': typeof ApiUploadImageRoute
+  '/api/upload/remote-images': typeof ApiUploadRemoteImagesRoute
 }
 export interface FileRoutesByTo {
   '/docs': typeof DocsRoute
@@ -83,6 +90,7 @@ export interface FileRoutesByTo {
   '/docs/mcp': typeof LayoutDocsMcpRoute
   '/docs/skill': typeof LayoutDocsSkillRoute
   '/api/upload/image': typeof ApiUploadImageRoute
+  '/api/upload/remote-images': typeof ApiUploadRemoteImagesRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -95,6 +103,7 @@ export interface FileRoutesById {
   '/_layout/docs/mcp': typeof LayoutDocsMcpRoute
   '/_layout/docs/skill': typeof LayoutDocsSkillRoute
   '/api/upload/image': typeof ApiUploadImageRoute
+  '/api/upload/remote-images': typeof ApiUploadRemoteImagesRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -107,6 +116,7 @@ export interface FileRouteTypes {
     | '/docs/mcp'
     | '/docs/skill'
     | '/api/upload/image'
+    | '/api/upload/remote-images'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/docs'
@@ -117,6 +127,7 @@ export interface FileRouteTypes {
     | '/docs/mcp'
     | '/docs/skill'
     | '/api/upload/image'
+    | '/api/upload/remote-images'
   id:
     | '__root__'
     | '/_layout'
@@ -128,6 +139,7 @@ export interface FileRouteTypes {
     | '/_layout/docs/mcp'
     | '/_layout/docs/skill'
     | '/api/upload/image'
+    | '/api/upload/remote-images'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -136,6 +148,7 @@ export interface RootRouteChildren {
   McpRoute: typeof McpRoute
   ApiSplatRoute: typeof ApiSplatRoute
   ApiUploadImageRoute: typeof ApiUploadImageRoute
+  ApiUploadRemoteImagesRoute: typeof ApiUploadRemoteImagesRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -181,6 +194,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/about'
       preLoaderRoute: typeof LayoutAboutRouteImport
       parentRoute: typeof LayoutRoute
+    }
+    '/api/upload/remote-images': {
+      id: '/api/upload/remote-images'
+      path: '/api/upload/remote-images'
+      fullPath: '/api/upload/remote-images'
+      preLoaderRoute: typeof ApiUploadRemoteImagesRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/upload/image': {
       id: '/api/upload/image'
@@ -229,6 +249,7 @@ const rootRouteChildren: RootRouteChildren = {
   McpRoute: McpRoute,
   ApiSplatRoute: ApiSplatRoute,
   ApiUploadImageRoute: ApiUploadImageRoute,
+  ApiUploadRemoteImagesRoute: ApiUploadRemoteImagesRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

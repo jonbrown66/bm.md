@@ -15,6 +15,20 @@ describe('wechat render adapter', () => {
     expect(html).toContain('https://example.com')
   })
 
+  it('removes href without footnotes when footnote links are disabled', async () => {
+    const html = await render({
+      markdown: '[示例](https://example.com)',
+      platform: 'wechat',
+      enableFootnoteLinks: false,
+    })
+
+    expect(html).not.toContain('href="https://example.com"')
+    expect(html).toContain('<span>示例</span>')
+    expect(html).not.toContain('footnote-ref')
+    expect(html).not.toContain('References')
+    expect(html).not.toContain('https://example.com')
+  })
+
   it('keeps mp.weixin links clickable and not footnoted', async () => {
     const html = await render({
       markdown: '[公众号](https://mp.weixin.qq.com/s/abc)',

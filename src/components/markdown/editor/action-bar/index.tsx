@@ -5,6 +5,7 @@ import { ExportButton } from './export-button'
 import { FormatButton } from './format-button'
 import { ImportButton } from './import-button'
 import { SettingsMenu } from './settings-menu'
+import { UploadImagesButton } from './upload-images-button'
 
 export function EditorActionBar() {
   return (
@@ -13,6 +14,7 @@ export function EditorActionBar() {
       <ExportButton />
       <Separator orientation="vertical" className="mx-2" />
       <FormatButton />
+      <UploadImagesButton />
       <CommandButton />
       <SettingsMenu />
     </TooltipProvider>
