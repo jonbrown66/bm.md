@@ -28,22 +28,11 @@
                   },
                   "markdownStyle": {
                     "enum": [
-                      "ayu-light",
-                      "bauhaus",
-                      "blueprint",
                       "botanical",
-                      "green-simple",
-                      "maximalism",
-                      "neo-brutalism",
-                      "newsprint",
-                      "organic",
-                      "playful-geometric",
-                      "professional",
-                      "retro",
-                      "sketch",
-                      "terminal"
+                      "kiko",
+                      "professional"
                     ],
-                    "default": "ayu-light",
+                    "default": "professional",
                     "description": "Markdown 排版样式 ID"
                   },
                   "codeTheme": {

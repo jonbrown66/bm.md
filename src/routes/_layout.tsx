@@ -1,6 +1,5 @@
 import { ClientOnly, createFileRoute, Outlet } from '@tanstack/react-router'
-import { useEffect } from 'react'
-import { CommandPalette } from '@/components/command-palette'
+import { lazy, useEffect } from 'react'
 import MarkdownEditor from '@/components/markdown/editor'
 import { FooterBar } from '@/components/markdown/footer-bar'
 import MarkdownPreviewer from '@/components/markdown/previewer'
@@ -8,6 +7,10 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/componen
 import { useFilesSync } from '@/hooks/use-files-sync'
 
 export const Route = createFileRoute('/_layout')({ component: App })
+
+const CommandPalette = lazy(() => import('@/components/command-palette').then(mod => ({
+  default: mod.CommandPalette,
+})))
 
 function App() {
   useFilesSync()

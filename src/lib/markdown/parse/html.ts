@@ -17,3 +17,5 @@ export async function parse(html: string) {
   const processed = await processor.process(cleaned)
   return processed.toString()
 }
+
+export default parse

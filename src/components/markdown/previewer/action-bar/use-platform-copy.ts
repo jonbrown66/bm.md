@@ -1,5 +1,4 @@
 import type { Platform } from '@/lib/markdown/render/adapters'
-import mermaid from 'mermaid'
 import { useCallback, useState } from 'react'
 import { mermaidConfig } from '@/config/mermaid'
 import { getMarkdownLocaleTexts } from '@/lib/locale'
@@ -89,6 +88,8 @@ export function usePlatformCopy(platform: Platform): PlatformCopyResult {
         const nodes = Array.from(doc.querySelectorAll('.mermaid'))
 
         if (nodes.length > 0) {
+          const { default: mermaid } = await import('mermaid')
+
           // Initialize mermaid
           mermaid.initialize({
             ...mermaidConfig,
