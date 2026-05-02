@@ -1,0 +1,99 @@
+/* ============================================
+   Kiko - Blueprint 极简背景变体
+
+   Kiko 继承 Blueprint 的字体、配色、字号和内容层级；
+   这里只覆盖背景、表格横向阅读和轻量 mac 风格代码块。
+   ============================================ */
+
+/* 容器 - 保留 Blueprint 内容样式，仅去掉主题背景色 */
+#bm-md {
+  background-color: transparent;
+}
+
+/* 代码块 - 轻量 mac 卡片风格，无复制按钮 */
+#bm-md pre {
+  position: relative;
+  margin: 1em 0;
+  padding: 3.05em 1.25em 1.15em;
+  background-color: #f4f4f3;
+  background-image:
+    radial-gradient(circle, #f5655b 0 0.42em, transparent 0.43em),
+    radial-gradient(circle, #f6bd4f 0 0.42em, transparent 0.43em),
+    radial-gradient(circle, #5ac85a 0 0.42em, transparent 0.43em);
+  background-repeat: no-repeat;
+  background-position:
+    1.25em 1em,
+    2.6em 1em,
+    3.95em 1em;
+  background-size: 0.9em 0.9em;
+  border: none;
+  border-radius: 10px;
+  overflow-x: auto;
+  box-shadow: none;
+}
+
+#bm-md pre::before {
+  content: none;
+}
+
+#bm-md pre code {
+  background-color: transparent;
+  color: #2f3437;
+  padding: 0;
+  border: none;
+  font-size: 0.95em;
+  line-height: 1.62;
+}
+
+/* Dark 代码主题下，Kiko 代码块跟随切换为深色卡片 */
+#bm-md.code-theme-dark pre {
+  background-color: #111827;
+  background-image:
+    radial-gradient(circle, #f5655b 0 0.42em, transparent 0.43em),
+    radial-gradient(circle, #f6bd4f 0 0.42em, transparent 0.43em),
+    radial-gradient(circle, #5ac85a 0 0.42em, transparent 0.43em);
+}
+
+#bm-md.code-theme-dark pre code {
+  background-color: transparent;
+  color: #e5e7eb;
+}
+
+/* 表格 - 内容过宽时横向滚动，保留完整列宽提升可读性 */
+#bm-md .figure-table {
+  max-width: 100%;
+  margin: 1em 0;
+  overflow-x: auto;
+  scrollbar-gutter: stable;
+  text-align: left;
+}
+
+#bm-md .figure-table::-webkit-scrollbar {
+  height: 10px;
+}
+
+#bm-md .figure-table::-webkit-scrollbar-track {
+  background-color: #f1f5f9;
+}
+
+#bm-md .figure-table::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border: 2px solid #f1f5f9;
+  border-radius: 999px;
+}
+
+#bm-md .figure-table table {
+  width: auto;
+  min-width: 100%;
+  margin: 0;
+  table-layout: auto;
+}
+
+#bm-md .figure-table th,
+#bm-md .figure-table td {
+  min-width: 7.5em;
+  max-width: 18em;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}

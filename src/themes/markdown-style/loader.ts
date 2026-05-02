@@ -7,20 +7,16 @@ function loadResetCss(): Promise<string> {
 }
 
 const themeModules: Record<string, () => Promise<{ default: string }>> = {
-  'ayu-light': () => import('./ayu-light.css?raw'),
-  'bauhaus': () => import('./bauhaus.css?raw'),
-  'blueprint': () => import('./blueprint.css?raw'),
-  'botanical': () => import('./botanical.css?raw'),
-  'green-simple': () => import('./green-simple.css?raw'),
-  'maximalism': () => import('./maximalism.css?raw'),
-  'neo-brutalism': () => import('./neo-brutalism.css?raw'),
-  'newsprint': () => import('./newsprint.css?raw'),
-  'organic': () => import('./organic.css?raw'),
-  'playful-geometric': () => import('./playful-geometric.css?raw'),
-  'professional': () => import('./professional.css?raw'),
-  'retro': () => import('./retro.css?raw'),
-  'sketch': () => import('./sketch.css?raw'),
-  'terminal': () => import('./terminal.css?raw'),
+  botanical: () => import('./botanical.css?raw'),
+  kiko: async () => {
+    const [blueprint, kiko] = await Promise.all([
+      import('./blueprint.css?raw'),
+      import('./kiko.css?raw'),
+    ])
+
+    return { default: `${blueprint.default}\n${kiko.default}` }
+  },
+  professional: () => import('./professional.css?raw'),
 }
 
 export async function loadMarkdownStyleCss(id: string): Promise<string | undefined> {

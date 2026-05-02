@@ -1,11 +1,18 @@
 import type { Platform } from '@/lib/markdown/render/adapters'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { DEFAULT_MARKDOWN_STYLE_ID, markdownStyleIds } from '@/themes/markdown-style'
 
 export const PREVIEW_WIDTH_MOBILE = 415
 export const PREVIEW_WIDTH_DESKTOP = 768
 
 type PreviewWidth = typeof PREVIEW_WIDTH_MOBILE | typeof PREVIEW_WIDTH_DESKTOP
+
+export function normalizePreviewMarkdownStyle(markdownStyle: unknown) {
+  return typeof markdownStyle === 'string' && markdownStyleIds.includes(markdownStyle)
+    ? markdownStyle
+    : DEFAULT_MARKDOWN_STYLE_ID
+}
 
 interface PreviewState {
   previewWidth: PreviewWidth
@@ -38,7 +45,7 @@ export const usePreviewStore = create<PreviewState>()(
       userPreferredWidth: PREVIEW_WIDTH_MOBILE,
       setUserPreferredWidth: userPreferredWidth => set({ previewWidth: userPreferredWidth, userPreferredWidth }),
 
-      markdownStyle: 'ayu-light',
+      markdownStyle: DEFAULT_MARKDOWN_STYLE_ID,
       setMarkdownStyle: markdownStyle => set({ markdownStyle, renderedHtmlMap: {} }),
 
       codeTheme: 'kimbie-light',
@@ -58,10 +65,19 @@ export const usePreviewStore = create<PreviewState>()(
       name: 'bm.md.preview',
       partialize: state => ({
         userPreferredWidth: state.userPreferredWidth,
-        markdownStyle: state.markdownStyle,
+        markdownStyle: normalizePreviewMarkdownStyle(state.markdownStyle),
         codeTheme: state.codeTheme,
         customCss: state.customCss,
       }),
+      merge: (persistedState, currentState) => {
+        const persisted = persistedState as Partial<PreviewState> | undefined
+
+        return {
+          ...currentState,
+          ...persisted,
+          markdownStyle: normalizePreviewMarkdownStyle(persisted?.markdownStyle),
+        }
+      },
     },
   ),
 )

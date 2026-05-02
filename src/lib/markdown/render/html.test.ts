@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { render } from './html'
+import { composeRenderCss, render } from './html'
 
 describe('markdown -> html render (general)', () => {
   it('renders paragraphs as p elements', async () => {
@@ -33,6 +33,40 @@ describe('markdown -> html render (general)', () => {
     expect(html).toContain('<pre')
     expect(html).toContain('<code')
     expect(html).toContain('hljs')
+  })
+
+  it('keeps kiko code blocks presentational without copy buttons', async () => {
+    const html = await render({
+      markdown: '```javascript\nconst x = 1\n```',
+      markdownStyle: 'kiko',
+    })
+
+    expect(html).toContain('<pre')
+    expect(html).toContain('<code')
+    expect(html).not.toContain('class="code-block"')
+    expect(html).not.toContain('data-code-copy-button')
+    expect(html).not.toContain('复制代码')
+  })
+
+  it('keeps kiko code block chrome after dark code theme css', () => {
+    const css = composeRenderCss({
+      markdownStyle: 'kiko',
+      markdownStyleCss: '#bm-md pre { background-color: #f4f4f3; background-image: radial-gradient(circle, #5ac85a 0 0.42em, transparent 0.43em); }',
+      codeThemeCss: '.hljs { background: #111827; }',
+    })
+
+    expect(css.indexOf('.hljs { background: #111827; }')).toBeLessThan(css.indexOf('#bm-md pre'))
+  })
+
+  it('wraps tables in a figure container for horizontal scrolling', async () => {
+    const markdown = '| 很长的列A | 很长的列B |\n|-----|-----|\n| 1 | 2 |'
+    const html = await render({
+      markdown,
+      markdownStyle: 'kiko',
+    })
+
+    expect(html).toContain('class="figure-table"')
+    expect(html).toContain('<table')
   })
 
   it('renders inline math with KaTeX', async () => {

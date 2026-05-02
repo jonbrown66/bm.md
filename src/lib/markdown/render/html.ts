@@ -40,6 +40,14 @@ interface ProcessorOptions {
   referenceTitle?: string
 }
 
+interface ComposeCssOptions {
+  markdownStyle?: string
+  markdownStyleCss?: string
+  codeThemeCss?: string
+  katexCss?: string
+  customCss?: string
+}
+
 const sanitizeSchema = {
   ...defaultSchema,
   protocols: {
@@ -63,6 +71,17 @@ const sanitizeSchema = {
     path: ['d'],
   },
 }
+
+const darkCodeThemeIds = new Set([
+  'catppuccin-frappe',
+  'catppuccin-macchiato',
+  'catppuccin-mocha',
+  'kimbie-dark',
+  'panda-syntax-dark',
+  'paraiso-dark',
+  'rose-pine',
+  'tokyo-night-dark',
+])
 
 function createProcessor({ enableFootnoteLinks, openLinksInNewWindow, platform = 'html', footnoteLabel = 'Footnotes', referenceTitle = 'References' }: ProcessorOptions) {
   const processor = unified()
@@ -115,6 +134,14 @@ function createProcessor({ enableFootnoteLinks, openLinksInNewWindow, platform =
   return processor
 }
 
+export function composeRenderCss({ markdownStyle, markdownStyleCss = '', codeThemeCss = '', katexCss = '', customCss = '' }: ComposeCssOptions): string {
+  const baseCss = markdownStyle === 'kiko'
+    ? [codeThemeCss, markdownStyleCss, katexCss, customCss]
+    : [markdownStyleCss, codeThemeCss, katexCss, customCss]
+
+  return baseCss.filter(Boolean).join('\n')
+}
+
 export async function render(options: RenderOptions): Promise<string> {
   const {
     markdown,
@@ -144,14 +171,16 @@ export async function render(options: RenderOptions): Promise<string> {
     codeTheme ? loadCodeThemeCss(codeTheme) : Promise.resolve(''),
     hasKatex ? loadKatexCss() : Promise.resolve(''),
   ])
-  const css = [
-    markdownStyleCss ?? '',
-    codeThemeCss ?? '',
-    katexCss ?? '',
+  const css = composeRenderCss({
+    markdownStyle,
+    markdownStyleCss: markdownStyleCss ?? '',
+    codeThemeCss: codeThemeCss ?? '',
+    katexCss: katexCss ?? '',
     customCss,
-  ].filter(Boolean).join('\n')
+  })
 
-  const wrapped = `<section id="bm-md">${html}</section>`
+  const codeThemeClass = codeTheme && darkCodeThemeIds.has(codeTheme) ? ' class="code-theme-dark"' : ''
+  const wrapped = `<section id="bm-md"${codeThemeClass}>${html}</section>`
 
   try {
     return juice.inlineContent(wrapped, css, {

@@ -1,5 +1,4 @@
 import { debounce } from 'es-toolkit'
-import mermaid from 'mermaid'
 import morphdom from 'morphdom'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { usePreviewScrollSync } from '@/components/markdown/hooks/use-scroll-sync'
@@ -15,7 +14,49 @@ import iframeShell from './iframe-shell.html?raw'
 
 const RENDER_DEBOUNCE_MS = 100
 
-mermaid.initialize(mermaidConfig)
+let mermaidPromise: Promise<typeof import('mermaid').default> | null = null
+
+async function loadMermaid() {
+  mermaidPromise ??= import('mermaid').then((mod) => {
+    mod.default.initialize(mermaidConfig)
+    return mod.default
+  })
+
+  return mermaidPromise
+}
+
+async function renderMermaidNodes(nodes: HTMLElement[], iframeDoc: Document | null | undefined) {
+  if (nodes.length === 0) {
+    return
+  }
+
+  const mermaid = await loadMermaid()
+
+  await Promise.all(nodes.map(async (node, index) => {
+    try {
+      const id = `mermaid-${Date.now()}-${index}`
+      const text = node.textContent || ''
+      const { svg } = await mermaid.render(id, text)
+      node.innerHTML = svg
+      node.setAttribute('data-processed', 'true')
+    }
+    catch (error) {
+      console.error('Mermaid render error:', error)
+      node.innerHTML = `<p class="text-red-500 font-mono text-sm p-2 bg-red-50 rounded">${error instanceof Error ? error.message : String(error)}</p>`
+    }
+  }))
+
+  if (!iframeDoc) {
+    return
+  }
+
+  const parentStyles = document.querySelectorAll('style[id^="mermaid"]')
+  parentStyles.forEach((style) => {
+    if (!iframeDoc.head.querySelector(`style[id="${style.id}"]`)) {
+      iframeDoc.head.appendChild(style.cloneNode(true))
+    }
+  })
+}
 
 export default function MarkdownRender() {
   const content = useFilesStore(state => state.currentContent)
@@ -71,31 +112,7 @@ export default function MarkdownRender() {
     })
 
     const nodes = Array.from(body.querySelectorAll('.mermaid:not([data-processed="true"])')) as HTMLElement[]
-    if (nodes.length > 0) {
-      Promise.all(nodes.map(async (node, index) => {
-        try {
-          const id = `mermaid-${Date.now()}-${index}`
-          const text = node.textContent || ''
-          const { svg } = await mermaid.render(id, text)
-          node.innerHTML = svg
-          node.setAttribute('data-processed', 'true')
-        }
-        catch (error) {
-          console.error('Mermaid render error:', error)
-          node.innerHTML = `<p class="text-red-500 font-mono text-sm p-2 bg-red-50 rounded">${error instanceof Error ? error.message : String(error)}</p>`
-        }
-      })).then(() => {
-        const iframeDoc = iframe.contentDocument
-        if (iframeDoc) {
-          const parentStyles = document.querySelectorAll('style[id^="mermaid"]')
-          parentStyles.forEach((style) => {
-            if (!iframeDoc.head.querySelector(`style[id="${style.id}"]`)) {
-              iframeDoc.head.appendChild(style.cloneNode(true))
-            }
-          })
-        }
-      })
-    }
+    void renderMermaidNodes(nodes, iframe.contentDocument)
   }, [iframeRef])
 
   const onIframeLoad = useCallback(() => {
@@ -110,31 +127,6 @@ export default function MarkdownRender() {
 
     const iframeDoc = iframeRef.current?.contentDocument
     if (iframeDoc) {
-      // 首次加载渲染 Mermaid
-      const nodes = Array.from(iframeDoc.querySelectorAll('.mermaid:not([data-processed="true"])')) as HTMLElement[]
-      if (nodes.length > 0) {
-        Promise.all(nodes.map(async (node, index) => {
-          try {
-            const id = `mermaid-init-${Date.now()}-${index}`
-            const text = node.textContent || ''
-            const { svg } = await mermaid.render(id, text)
-            node.innerHTML = svg
-            node.setAttribute('data-processed', 'true')
-          }
-          catch (error) {
-            console.error('Mermaid render error:', error)
-            node.innerHTML = `<p class="text-red-500 font-mono text-sm p-2 bg-red-50 rounded">${error instanceof Error ? error.message : String(error)}</p>`
-          }
-        })).then(() => {
-          const parentStyles = document.querySelectorAll('style[id^="mermaid"]')
-          parentStyles.forEach((style) => {
-            if (!iframeDoc.head.querySelector(`style[id="${style.id}"]`)) {
-              iframeDoc.head.appendChild(style.cloneNode(true))
-            }
-          })
-        })
-      }
-
       iframeDoc.addEventListener('click', (e: MouseEvent) => {
         const link = (e.target as HTMLElement).closest('a')
         if (!link)

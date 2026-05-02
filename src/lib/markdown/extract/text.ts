@@ -15,3 +15,5 @@ export async function extract(markdown: string) {
   const processed = await processor.process(markdown)
   return processed.toString()
 }
+
+export default extract
