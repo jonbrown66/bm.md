@@ -6,6 +6,15 @@ import { normalizePreviewMarkdownStyle, usePreviewStore } from '@/stores/preview
 import { loadMarkdownStyleCss, markdownStyles } from './index'
 
 describe('markdown styles', () => {
+  function getRootContainerRule(source: string): string {
+    return source.match(/#bm-md\s*\{[^}]*\}/)?.[0] ?? ''
+  }
+
+  function getRule(source: string, selector: string): string {
+    const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    return source.match(new RegExp(`${escapedSelector}\\s*\\{[^}]*\\}`))?.[0] ?? ''
+  }
+
   it('only exposes the essential built-in themes', async () => {
     expect(markdownStyles.map(style => style.id)).toEqual([
       'botanical',
@@ -38,6 +47,15 @@ describe('markdown styles', () => {
     expect(normalizePreviewMarkdownStyle('botanical')).toBe('botanical')
   })
 
+  it('keeps built-in theme containers transparent', async () => {
+    for (const style of markdownStyles) {
+      const cssPath = fileURLToPath(new URL(`./${style.id}.css`, import.meta.url))
+      const source = await readFile(cssPath, 'utf8')
+
+      expect(getRootContainerRule(source)).toContain('background-color: transparent')
+    }
+  })
+
   it('registers and loads kiko theme css', async () => {
     expect(markdownStyles).toContainEqual({ id: 'kiko', name: 'Kiko' })
 
@@ -52,6 +70,8 @@ describe('markdown styles', () => {
     expect(loaderSource).toContain('import(\'./blueprint.css?raw\')')
     expect(source).toContain('Kiko')
     expect(source).toContain('background-color: transparent')
+    expect(source).toMatch(/#bm-md\s*\{[\s\S]*?border: none;/)
+    expect(source).toMatch(/#bm-md h1,\s*#bm-md h2\s*\{[\s\S]*?border-bottom: none;/)
     expect(source).toContain('background-color: #f4f4f3')
     expect(source).toContain('background-image:')
     expect(source).toContain('radial-gradient(circle, #5ac85a 0 0.42em, transparent 0.43em)')
@@ -59,5 +79,12 @@ describe('markdown styles', () => {
     expect(source).toContain('scrollbar-gutter: stable')
     expect(source).toContain('overflow-wrap: anywhere')
     expect(source).not.toContain('#bm-md .code-block-copy')
+  })
+
+  it('uses the configured professional subsection heading color', async () => {
+    const cssPath = fileURLToPath(new URL('./professional.css', import.meta.url))
+    const source = await readFile(cssPath, 'utf8')
+
+    expect(getRule(source, '#bm-md h2')).toContain('color: #a9d56b')
   })
 })

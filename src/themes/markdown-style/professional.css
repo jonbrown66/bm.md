@@ -26,8 +26,8 @@
 /* 容器 - 象牙白背景，传达专业信任感 */
 #bm-md {
   color: #1a1a1a;
-  background-color: #fafaf8;
-  font-family: Georgia, 'Times New Roman', 'Songti SC', 'SimSun', serif;
+  background-color: transparent;
+  font-family: Georgia, "Times New Roman", "Songti SC", "SimSun", serif;
   font-size: 16px;
   line-height: 1.75;
   padding: 1.5em 1.25em;
@@ -44,7 +44,7 @@
 #bm-md h4,
 #bm-md h5,
 #bm-md h6 {
-  font-family: Georgia, 'Times New Roman', 'Songti SC', 'SimSun', serif;
+  font-family: Georgia, "Times New Roman", "Songti SC", "SimSun", serif;
   font-weight: 700;
   line-height: 1.25;
   margin-top: 1.35em;
@@ -63,8 +63,8 @@
 
 /* H2 - 章节标题，细边框分隔 */
 #bm-md h2 {
-  font-size: 1.5em;
-  color: #1a1a1a;
+  font-size: 2em;
+  color: #e67e22;
   padding-bottom: 0.3em;
   border-bottom: 1px solid #e8e4df;
 }
@@ -182,7 +182,7 @@
 
 /* 行内引用 - 金色引号 */
 #bm-md q {
-  quotes: '"' '"' '' ' ' '';
+  quotes: '"' '"' "" " " "";
   color: #1a1a1a;
 }
 
@@ -207,7 +207,7 @@
 /* 示例输出 - 等宽字体 */
 #bm-md samp,
 #bm-md tt {
-  font-family: 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-family: "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
   font-size: 0.875em;
   background-color: #f5f3f0;
   color: #4a4a4a;
@@ -307,7 +307,7 @@
   gap: 0.4em;
 }
 
-#bm-md input[type='checkbox'] {
+#bm-md input[type="checkbox"] {
   margin-top: 0.35em;
   accent-color: #b8860b;
 }
@@ -347,7 +347,7 @@
 
 /* 行内代码 */
 #bm-md code {
-  font-family: 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-family: "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
   font-size: 0.875em;
   background-color: #f5f3f0;
   color: #8b4513;
@@ -431,7 +431,7 @@
 }
 
 #bm-md .frontmatter-key::after {
-  content: ':';
+  content: ":";
 }
 
 #bm-md .frontmatter-value {
@@ -546,7 +546,7 @@
    ============================================ */
 
 #bm-md kbd {
-  font-family: 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-family: "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
   font-size: 0.8125em;
   display: inline-block;
   padding: 0.15em 0.4em;

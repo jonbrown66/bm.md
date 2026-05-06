@@ -5,7 +5,7 @@
    这里只覆盖字体、背景、表格横向阅读和轻量 mac 风格代码块。
    ============================================ */
 
-/* 容器 - 保留 Blueprint 内容样式，仅去掉主题背景色 */
+/* 容器 - 保留 Blueprint 内容样式，去掉主题背景色和外框线 */
 #bm-md {
   background-color: transparent;
   font-family:
@@ -21,6 +21,7 @@
     'Segoe UI',
     sans-serif;
   font-size: 15px;
+  border: none;
 }
 
 /* 标题 - 使用现代中文无衬线，避免继承 Blueprint 的传统衬线标题 */
@@ -43,6 +44,12 @@
     'Segoe UI',
     sans-serif;
   font-weight: 650;
+}
+
+#bm-md h1,
+#bm-md h2 {
+  padding-bottom: 0;
+  border-bottom: none;
 }
 
 /* 代码块 - 轻量 mac 卡片风格，无复制按钮 */
