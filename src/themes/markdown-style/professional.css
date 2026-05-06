@@ -63,7 +63,7 @@
 
 /* H2 - 章节标题，细边框分隔 */
 #bm-md h2 {
-  font-size: 1.8em;
+  font-size: 1.6em;
   color: #e67e22;
   padding-bottom: 0.3em;
 }
@@ -356,22 +356,34 @@
 
 /* 代码块容器 */
 #bm-md pre {
-  margin: 1.1em 0;
-  padding: 0.875em 1em;
-  background-color: #f8f7f4;
-  border: 1px solid #e8e4df;
-  border-top: 2px solid #b8860b;
+  position: relative;
+  margin: 1em 0;
+  padding: 3.05em 1em 1em;
+  background-color: #f4f4f3;
+  background-image:
+    radial-gradient(circle, #f5655b 0 0.42em, transparent 0.43em),
+    radial-gradient(circle, #f6bd4f 0 0.42em, transparent 0.43em),
+    radial-gradient(circle, #5ac85a 0 0.42em, transparent 0.43em);
+  background-repeat: no-repeat;
+  background-position:
+    1.25em 1em,
+    2.6em 1em,
+    3.95em 1em;
+  background-size: 0.9em 0.9em;
+  border: none;
+  border-radius: 10px;
   overflow-x: auto;
+  box-shadow: none;
 }
 
 /* 代码块内代码重置 */
 #bm-md pre code {
   background-color: transparent;
-  color: inherit;
+  color: #2f3437;
   padding: 0;
   border: none;
-  font-size: 0.875em;
-  line-height: 1.5;
+  font-size: 0.95em;
+  line-height: 1.62;
 }
 
 /* ============================================
@@ -388,7 +400,7 @@
 /* 表头首行样式（替代 thead） */
 #bm-md tr:first-child th {
   background-color: transparent;
-  border-bottom: 2px solid #1a1a1a;
+  border-bottom: 1.5px solid #e67e22;
 }
 
 #bm-md th,
