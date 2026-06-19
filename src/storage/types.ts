@@ -3,7 +3,7 @@
  */
 
 /** 存储提供商类型 */
-export type StorageProviderType = 's3' | 'dc'
+export type StorageProviderType = 's3' | 'dc' | 'github'
 
 /** 上传结果 */
 export interface UploadResult {
@@ -26,6 +26,8 @@ export interface StorageProvider {
   readonly type: StorageProviderType
   /** 上传文件 */
   upload: (options: UploadOptions) => Promise<UploadResult>
+  /** 批量上传文件 */
+  uploadMany?: (options: UploadOptions[]) => Promise<UploadResult[]>
 }
 
 /** 存储错误类，包含 provider 标识 */

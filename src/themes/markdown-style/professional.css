@@ -64,7 +64,7 @@
 /* H2 - 章节标题，细边框分隔 */
 #bm-md h2 {
   font-size: 1.6em;
-  color: #e67e22;
+  color: #a9d56b;
   padding-bottom: 0.3em;
 }
 
@@ -358,32 +358,101 @@
 #bm-md pre {
   position: relative;
   margin: 1em 0;
-  padding: 3.05em 1em 1em;
+  padding: 2.15em 0.9em 0.9em;
   background-color: #f4f4f3;
   background-image:
-    radial-gradient(circle, #f5655b 0 0.42em, transparent 0.43em),
-    radial-gradient(circle, #f6bd4f 0 0.42em, transparent 0.43em),
-    radial-gradient(circle, #5ac85a 0 0.42em, transparent 0.43em);
+    radial-gradient(circle, #f5655b 0 0.3em, transparent 0.31em),
+    radial-gradient(circle, #f6bd4f 0 0.3em, transparent 0.31em),
+    radial-gradient(circle, #5ac85a 0 0.3em, transparent 0.31em);
   background-repeat: no-repeat;
   background-position:
-    1.25em 1em,
-    2.6em 1em,
-    3.95em 1em;
-  background-size: 0.9em 0.9em;
+    0.9em 0.75em,
+    1.85em 0.75em,
+    2.8em 0.75em;
+  background-size:
+    0.65em 0.65em,
+    0.65em 0.65em,
+    0.65em 0.65em;
   border: none;
-  border-radius: 10px;
+  border-radius: 8px;
   overflow-x: auto;
+  scrollbar-color: #c7c7c7 transparent;
+  scrollbar-gutter: auto;
+  scrollbar-width: thin;
   box-shadow: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+#bm-md pre::before {
+  content: none;
+}
+
+#bm-md pre::after {
+  content: none;
+}
+
+#bm-md pre::-webkit-scrollbar {
+  width: 0;
+  height: 4px;
+}
+
+#bm-md pre::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+#bm-md pre::-webkit-scrollbar-track {
+  background-color: transparent;
+}
+
+#bm-md pre::-webkit-scrollbar-thumb {
+  background-color: #c7c7c7 !important;
+  border-radius: 999px;
+}
+
+#bm-md pre::-webkit-scrollbar-thumb:hover {
+  background-color: #a6a6a6 !important;
+}
+
+@media (hover: none) {
+  #bm-md pre {
+    padding-bottom: 1em;
+  }
+
+  #bm-md pre::after {
+    position: absolute;
+    right: 0.9em;
+    bottom: 0.38em;
+    left: 0.9em;
+    height: 2px;
+    border-radius: 999px;
+    background-color: #d0d0d0;
+    content: '';
+    opacity: 0.7;
+    pointer-events: none;
+  }
 }
 
 /* 代码块内代码重置 */
 #bm-md pre code {
+  display: block;
+  min-width: max-content;
   background-color: transparent;
   color: #2f3437;
   padding: 0;
   border: none;
   font-size: 0.95em;
   line-height: 1.62;
+  overflow-wrap: normal;
+  white-space: pre;
+  word-break: normal;
+}
+
+#bm-md pre code * {
+  overflow-wrap: normal;
+  white-space: pre;
+  word-break: normal;
 }
 
 /* ============================================

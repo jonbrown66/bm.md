@@ -31,6 +31,14 @@ export const env = {
   get S3_REGION() { return getPrivate('S3_REGION') },
   get S3_PUBLIC_BASE_URL() { return getPrivate('S3_PUBLIC_BASE_URL') },
 
+  // GitHub 图床配置
+  get GITHUB_IMAGE_TOKEN() { return getPrivate('GITHUB_IMAGE_TOKEN') },
+  get GITHUB_IMAGE_OWNER() { return getPrivate('GITHUB_IMAGE_OWNER') },
+  get GITHUB_IMAGE_REPO() { return getPrivate('GITHUB_IMAGE_REPO') },
+  get GITHUB_IMAGE_BRANCH() { return getPrivate('GITHUB_IMAGE_BRANCH') },
+  get GITHUB_IMAGE_PATH() { return getPrivate('GITHUB_IMAGE_PATH') },
+  get GITHUB_IMAGE_PUBLIC_BASE_URL() { return getPrivate('GITHUB_IMAGE_PUBLIC_BASE_URL') },
+
   // DC 图床配置
   get DC_UPLOAD_URL() { return getPrivate('DC_UPLOAD_URL') },
 

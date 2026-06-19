@@ -14,6 +14,9 @@ import appCss from '../styles.css?url'
 
 // Google Fonts URL - 仅加载 Logo 使用的字符
 const fontUrl = `https://fonts.googleapis.cn/css2?family=Doto:wght@700&display=swap&text=${encodeURIComponent(['bm.md', '404'].join(''))}`
+const manifestLink = import.meta.env.PROD
+  ? [{ rel: 'manifest', href: '/manifest.webmanifest' }]
+  : []
 
 export const Route = createRootRoute({
   head: () => ({
@@ -43,7 +46,6 @@ export const Route = createRootRoute({
       { rel: 'preconnect', href: 'https://fonts.googleapis.cn' },
       { rel: 'preconnect', href: 'https://fonts.gstatic.cn', crossOrigin: 'anonymous' },
       // Preload 关键资源
-      { rel: 'preload', href: fontUrl, as: 'style', crossOrigin: 'anonymous' },
       { rel: 'preload', href: appCss, as: 'style' },
       { rel: 'preload', href: '/blur-mask.svg', as: 'image', type: 'image/svg+xml' },
       // Stylesheets
@@ -51,7 +53,7 @@ export const Route = createRootRoute({
       { rel: 'stylesheet', href: appCss },
       // Meta
       { rel: 'canonical', href: appConfig.url },
-      { rel: 'manifest', href: '/manifest.webmanifest' },
+      ...manifestLink,
       { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' },
       { rel: 'apple-touch-icon', href: '/apple-touch-icon.png' },
     ],

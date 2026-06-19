@@ -1,7 +1,6 @@
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { languages } from '@codemirror/language-data'
-import { EditorView } from '@codemirror/view'
-import CodeMirror from '@uiw/react-codemirror'
+import CodeMirror, { EditorView } from '@uiw/react-codemirror'
 import { useTheme } from 'next-themes'
 import { useMemo } from 'react'
 import { useEditorScrollSync } from '@/components/markdown/hooks/use-scroll-sync'

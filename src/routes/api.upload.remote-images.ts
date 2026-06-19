@@ -1,3 +1,4 @@
+import type { UploadOptions, UploadResult } from '@/storage'
 import { createFileRoute } from '@tanstack/react-router'
 import * as z from 'zod'
 import { detectImageContentType, getImageFilename } from '@/lib/image-content'
@@ -19,12 +20,17 @@ interface RemoteImageResult {
   error?: string
 }
 
+interface DownloadedRemoteImage {
+  oldUrl: string
+  uploadOptions: UploadOptions
+}
+
 function isHttpUrl(value: string): boolean {
   const url = new URL(value)
   return url.protocol === 'http:' || url.protocol === 'https:'
 }
 
-async function migrateRemoteImage(oldUrl: string): Promise<RemoteImageResult> {
+async function downloadRemoteImage(oldUrl: string): Promise<DownloadedRemoteImage | RemoteImageResult> {
   try {
     if (!isHttpUrl(oldUrl)) {
       return { oldUrl, status: 'failed', error: '只支持 http/https 图片链接' }
@@ -62,21 +68,17 @@ async function migrateRemoteImage(oldUrl: string): Promise<RemoteImageResult> {
 
     const filename = getImageFilename(oldUrl, detectedContentType)
     const file = new Blob([buffer], { type: detectedContentType })
-    const storage = getStorageProvider()
-    const result = await storage.upload({
-      file,
-      filename,
-      contentType: detectedContentType,
-    })
 
-    return { oldUrl, newUrl: result.url, status: 'success' }
+    return {
+      oldUrl,
+      uploadOptions: {
+        file,
+        filename,
+        contentType: detectedContentType,
+      },
+    }
   }
   catch (error) {
-    if (error instanceof StorageError) {
-      console.error(`Remote image upload error [${error.provider}]:`, error.message, error.cause)
-      return { oldUrl, status: 'failed', error: '图片上传到存储失败' }
-    }
-
     if (error instanceof DOMException && error.name === 'TimeoutError') {
       return { oldUrl, status: 'failed', error: '图片下载超时' }
     }
@@ -90,6 +92,58 @@ async function migrateRemoteImage(oldUrl: string): Promise<RemoteImageResult> {
   }
 }
 
+function isRemoteImageResult(value: DownloadedRemoteImage | RemoteImageResult): value is RemoteImageResult {
+  return 'status' in value
+}
+
+async function uploadDownloadedImages(images: DownloadedRemoteImage[]): Promise<RemoteImageResult[]> {
+  if (images.length === 0) {
+    return []
+  }
+
+  const storage = getStorageProvider()
+
+  try {
+    const uploadResults: UploadResult[] = storage.uploadMany
+      ? await storage.uploadMany(images.map(image => image.uploadOptions))
+      : await Promise.all(images.map(image => storage.upload(image.uploadOptions)))
+
+    return images.map((image, index) => ({
+      oldUrl: image.oldUrl,
+      newUrl: uploadResults[index]?.url,
+      status: 'success',
+    }))
+  }
+  catch (error) {
+    if (error instanceof StorageError) {
+      console.error(`Remote image upload error [${error.provider}]:`, error.message, error.cause)
+      return images.map(image => ({
+        oldUrl: image.oldUrl,
+        status: 'failed',
+        error: error.message,
+      }))
+    }
+
+    console.error('Remote image upload error:', error)
+    return images.map(image => ({
+      oldUrl: image.oldUrl,
+      status: 'failed',
+      error: '图片上传到存储失败',
+    }))
+  }
+}
+
+async function migrateRemoteImages(urls: string[]): Promise<RemoteImageResult[]> {
+  const downloadedResults = await Promise.all(urls.map(downloadRemoteImage))
+  const failedDownloads = downloadedResults.filter(isRemoteImageResult)
+  const downloadedImages = downloadedResults.filter(
+    (result): result is DownloadedRemoteImage => !isRemoteImageResult(result),
+  )
+  const uploadedResults = await uploadDownloadedImages(downloadedImages)
+
+  return [...failedDownloads, ...uploadedResults]
+}
+
 export const Route = createFileRoute('/api/upload/remote-images')({
   server: {
     middleware: [corsMiddleware],
@@ -100,7 +154,7 @@ export const Route = createFileRoute('/api/upload/remote-images')({
           const parsed = remoteImagesSchema.parse(body)
           const urls = Array.from(new Set(parsed.urls))
 
-          const results = await Promise.all(urls.map(migrateRemoteImage))
+          const results = await migrateRemoteImages(urls)
 
           return Response.json({ results })
         }

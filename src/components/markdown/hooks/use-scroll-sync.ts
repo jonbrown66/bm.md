@@ -1,6 +1,5 @@
-import type { Extension } from '@codemirror/state'
-import type { EditorView } from '@codemirror/view'
-import { EditorView as EditorViewClass } from '@codemirror/view'
+import type { EditorView, Extension } from '@uiw/react-codemirror'
+import { EditorView as EditorViewClass } from '@uiw/react-codemirror'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useEditorStore } from '@/stores/editor'
 
