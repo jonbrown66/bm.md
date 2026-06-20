@@ -1,3 +1,4 @@
+/* eslint-disable react-dom/no-unsafe-iframe-sandbox -- 预览 iframe 需要同源 DOM 访问和脚本执行来渲染 Mermaid 与同步内容。 */
 import { debounce } from 'es-toolkit'
 import morphdom from 'morphdom'
 import { useCallback, useEffect, useMemo, useRef } from 'react'

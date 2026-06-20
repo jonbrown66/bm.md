@@ -150,7 +150,7 @@ bm.md 是一个专业的 Markdown 排版工具，专为内容创作者设计。�
 
 示例：
 
-```css
+```text
 /* 修改标题颜色 */
 #bm-md h1 {
   color: #e74c3c;

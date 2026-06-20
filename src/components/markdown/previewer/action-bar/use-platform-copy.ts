@@ -59,6 +59,7 @@ export function usePlatformCopy(platform: Platform): PlatformCopyResult {
   const content = useFilesStore(state => state.currentContent)
   const markdownStyle = usePreviewStore(state => state.markdownStyle)
   const codeTheme = usePreviewStore(state => state.codeTheme)
+  const customCss = usePreviewStore(state => state.customCss)
   const enableFootnoteLinks = useEditorStore(state => state.enableFootnoteLinks)
   const openLinksInNewWindow = useEditorStore(state => state.openLinksInNewWindow)
   const setRenderedHtml = usePreviewStore(state => state.setRenderedHtml)
@@ -73,6 +74,7 @@ export function usePlatformCopy(platform: Platform): PlatformCopyResult {
         markdown: content,
         markdownStyle,
         codeTheme,
+        customCss,
         enableFootnoteLinks,
         openLinksInNewWindow,
         platform,
@@ -177,7 +179,7 @@ export function usePlatformCopy(platform: Platform): PlatformCopyResult {
     finally {
       setIsLoading(false)
     }
-  }, [content, markdownStyle, codeTheme, enableFootnoteLinks, openLinksInNewWindow, platform, setRenderedHtml]) // Removed getRenderedHtml dependency to force fresh render
+  }, [content, markdownStyle, codeTheme, customCss, enableFootnoteLinks, openLinksInNewWindow, platform, setRenderedHtml]) // Removed getRenderedHtml dependency to force fresh render
 
   return { getHtml, isLoading, error }
 }

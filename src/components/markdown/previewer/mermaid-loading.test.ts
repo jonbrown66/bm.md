@@ -15,4 +15,13 @@ describe('preview mermaid loading', () => {
     expect(previewSource).not.toMatch(/import\s+mermaid\s+from\s+['"]mermaid['"]/)
     expect(copySource).not.toMatch(/import\s+mermaid\s+from\s+['"]mermaid['"]/)
   })
+
+  it('passes custom css through the platform copy render path', async () => {
+    const copyPath = fileURLToPath(new URL('./action-bar/use-platform-copy.ts', import.meta.url))
+    const copySource = await readFile(copyPath, 'utf8')
+
+    expect(copySource).toContain('const customCss = usePreviewStore')
+    expect(copySource).toContain('customCss,')
+    expect(copySource).toContain('customCss, enableFootnoteLinks')
+  })
 })
