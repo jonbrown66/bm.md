@@ -3,12 +3,14 @@ import { lazy, useEffect, useRef } from 'react'
 import { usePreviewStore } from '@/stores/preview'
 import { PreviewerFallback } from './fallback'
 import MarkdownPreviewerSidebar from './sidebar'
+import { XhsPreview } from './xhs-preview'
 
 const MarkdownRender = lazy(() => import('./render'))
 
 export default function MarkdownPreviewer() {
   const containerRef = useRef<HTMLDivElement>(null)
   const previewWidth = usePreviewStore(state => state.previewWidth)
+  const previewMode = usePreviewStore(state => state.previewMode)
   const userPreferredWidth = usePreviewStore(state => state.userPreferredWidth)
   const setPreviewWidth = usePreviewStore(state => state.setPreviewWidth)
 
@@ -36,11 +38,21 @@ export default function MarkdownPreviewer() {
     <div className="flex h-full w-full overflow-hidden bg-editor">
       <div
         ref={containerRef}
-        className="flex flex-1 items-center justify-center p-4"
+        className={previewMode === 'xhs'
+          ? 'flex min-w-0 flex-1 overflow-hidden'
+          : 'flex flex-1 items-center justify-center p-4'}
       >
-        <ClientOnly fallback={<PreviewerFallback />}>
-          <MarkdownRender />
-        </ClientOnly>
+        {previewMode === 'xhs'
+          ? (
+              <ClientOnly fallback={<PreviewerFallback />}>
+                <XhsPreview />
+              </ClientOnly>
+            )
+          : (
+              <ClientOnly fallback={<PreviewerFallback />}>
+                <MarkdownRender />
+              </ClientOnly>
+            )}
       </div>
       <MarkdownPreviewerSidebar />
     </div>

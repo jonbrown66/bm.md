@@ -1,5 +1,5 @@
 import { ClientOnly, Link } from '@tanstack/react-router'
-import { Monitor, Moon, Smartphone, Sun } from 'lucide-react'
+import { ImageDown, Monitor, Moon, Smartphone, Sun } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -20,12 +20,15 @@ import {
 
 export default function MarkdownPreviewerSidebar() {
   const previewWidth = usePreviewStore(state => state.previewWidth)
+  const previewMode = usePreviewStore(state => state.previewMode)
+  const setPreviewMode = usePreviewStore(state => state.setPreviewMode)
   const setUserPreferredWidth = usePreviewStore(state => state.setUserPreferredWidth)
   const { theme, setTheme } = useTheme()
 
   const isDark = theme === 'dark'
-  const isMobileView = previewWidth === PREVIEW_WIDTH_MOBILE
-  const isDesktopView = previewWidth === PREVIEW_WIDTH_DESKTOP
+  const isMobileView = previewMode === 'mobile' && previewWidth === PREVIEW_WIDTH_MOBILE
+  const isDesktopView = previewMode === 'desktop' && previewWidth === PREVIEW_WIDTH_DESKTOP
+  const isXhsView = previewMode === 'xhs'
 
   const handleThemeToggle = () => {
     trackEvent('theme', 'toggle', 'button')
@@ -100,6 +103,27 @@ export default function MarkdownPreviewerSidebar() {
           />
           <TooltipContent side="left">
             {viewModeConfig.desktop.label}
+          </TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger
+            render={(
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={viewModeConfig.xhs.label}
+                onClick={() => setPreviewMode('xhs')}
+              >
+                <ImageDown className={isXhsView
+                  ? 'size-4 text-primary'
+                  : `size-4`}
+                />
+              </Button>
+            )}
+          />
+          <TooltipContent side="left">
+            {viewModeConfig.xhs.label}
           </TooltipContent>
         </Tooltip>
 

@@ -152,6 +152,7 @@ export const editorSettingsConfig: readonly EditorSettingItem[] = [
 export const viewModeConfig = {
   mobile: { label: '移动端视图', icon: 'Smartphone' },
   desktop: { label: '桌面端视图', icon: 'Monitor' },
+  xhs: { label: '小红书预览', icon: 'ImageDown' },
 } as const satisfies Record<string, ViewModeItem>
 
 // ========== 导航配置 ==========
