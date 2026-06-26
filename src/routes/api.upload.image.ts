@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import * as z from 'zod'
 import { corsMiddleware } from '@/lib/middleware/cors'
 import { getStorageProvider, StorageError } from '@/storage'
+import { getPublicStorageErrorMessage } from '@/storage/errors'
 
 const _1MB = 1024 * 1024 // 1MB
 const maxFileSize = 5
@@ -57,7 +58,7 @@ export const Route = createFileRoute('/api/upload/image')({
           if (error instanceof StorageError) {
             console.error(`Upload error [${error.provider}]:`, error.message, error.cause)
             return Response.json(
-              { error: '图片上传到存储失败' },
+              { error: getPublicStorageErrorMessage(error) },
               { status: 500 },
             )
           }

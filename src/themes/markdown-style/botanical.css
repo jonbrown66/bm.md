@@ -33,9 +33,12 @@
 #bm-md {
   color: #2a2520;
   background-color: transparent;
-  font-family: Georgia, 'Songti SC', 'Noto Serif SC', 'Times New Roman', serif;
-  font-size: 16px;
-  line-height: 1.75;
+  font-family:
+    'GT Standard L Regular', 'GT Standard L Regular Placeholder', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC',
+    'Source Han Sans SC', 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
   padding: 1.5em 1.25em;
 }
 
@@ -50,16 +53,18 @@
 #bm-md h4,
 #bm-md h5,
 #bm-md h6 {
-  font-family: Georgia, 'Songti SC', 'Noto Serif SC', 'Times New Roman', serif;
-  font-weight: 600;
-  line-height: 1.35;
+  font-family:
+    'GT Standard L Regular', 'GT Standard L Regular Placeholder', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC',
+    'Source Han Sans SC', 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif;
+  font-weight: 400;
   margin-top: 1.35em;
   margin-bottom: 0.55em;
 }
 
 /* H1 - 深铜版绿，图鉴标题 */
 #bm-md h1 {
-  font-size: 1.875em;
+  font-size: 34px;
+  line-height: 40px;
   color: #2e5d4e;
   text-align: center;
   padding-bottom: 0.45em;
@@ -68,7 +73,8 @@
 
 /* H2 - 章节标题，精致左边框 */
 #bm-md h2 {
-  font-size: 1.5em;
+  font-size: 24px;
+  line-height: 30px;
   color: #2e5d4e;
   padding: 0.25em 0.75em;
   border-left: 3px solid #2e5d4e;
@@ -78,7 +84,8 @@
 
 /* H3 - 科属分类标题 */
 #bm-md h3 {
-  font-size: 1.25em;
+  font-size: 20px;
+  line-height: 26px;
   color: #3a6b5a;
 }
 
@@ -97,13 +104,20 @@
 }
 
 #bm-md h4 {
-  font-size: 1.125em;
+  font-size: 18px;
+  line-height: 23px;
 }
 
 #bm-md h5,
 #bm-md h6 {
-  font-size: 1em;
+  font-size: 16px;
+  line-height: 21px;
   font-style: italic;
+}
+
+#bm-md h6 {
+  font-size: 14px;
+  line-height: 20px;
 }
 
 /* 首个标题无上边距 */
@@ -166,20 +180,20 @@
 
 /* 小号文字 */
 #bm-md small {
-  font-size: 0.875em;
+  font-size: 12px;
   color: #5c5550;
 }
 
 /* 上标 */
 #bm-md sup {
-  font-size: 0.75em;
+  font-size: 12px;
   line-height: 0;
   vertical-align: super;
 }
 
 /* 下标 */
 #bm-md sub {
-  font-size: 0.75em;
+  font-size: 12px;
   line-height: 0;
   vertical-align: sub;
 }
@@ -223,7 +237,7 @@
 #bm-md samp,
 #bm-md tt {
   font-family: 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
-  font-size: 0.875em;
+  font-size: 13px;
   background-color: #ede9e0;
   color: #3a6b5a;
   padding: 0.15em 0.35em;
@@ -365,7 +379,7 @@
 /* 行内代码 */
 #bm-md code {
   font-family: 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
-  font-size: 0.875em;
+  font-size: 13px;
   background-color: #ede9e0;
   color: #3d5a80;
   padding: 0.2em 0.45em;
@@ -388,8 +402,8 @@
   color: inherit;
   padding: 0;
   border: none;
-  font-size: 0.875em;
-  line-height: 1.6;
+  font-size: 13px;
+  line-height: 20px;
 }
 
 /* ============================================
@@ -400,7 +414,7 @@
   width: 100%;
   margin: 1.1em 0;
   border-collapse: collapse;
-  font-size: 0.9375em;
+  font-size: 13px;
   border: 1px solid #2e5d4e;
 }
 
@@ -431,7 +445,7 @@
 #bm-md .frontmatter-table {
   width: auto;
   margin-bottom: 1.5em;
-  font-size: 0.875em;
+  font-size: 13px;
   border: none;
 }
 
@@ -502,7 +516,7 @@
 
 #bm-md figcaption {
   margin-top: 0.7em;
-  font-size: 0.875em;
+  font-size: 13px;
   color: #5c5550;
   font-style: italic;
 }
@@ -515,7 +529,7 @@
   margin-top: 2.25em;
   padding-top: 1.1em;
   border-top: 1px solid #2e5d4e;
-  font-size: 0.875em;
+  font-size: 12px;
   color: #5c5550;
 }
 
@@ -524,7 +538,7 @@
 }
 
 #bm-md .footnote-ref {
-  font-size: 0.75em;
+  font-size: 12px;
   vertical-align: super;
   color: #3d5a80;
   font-weight: 600;
@@ -567,8 +581,10 @@
    ============================================ */
 
 #bm-md kbd {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  font-size: 0.8125em;
+  font-family:
+    'GT Standard L Regular', 'GT Standard L Regular Placeholder', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC',
+    'Source Han Sans SC', 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif;
+  font-size: 12px;
   display: inline-block;
   padding: 0.2em 0.5em;
   background-color: #f0ede6;
@@ -717,7 +733,7 @@
 
 #bm-md .meta,
 #bm-md time {
-  font-size: 0.875em;
+  font-size: 12px;
   color: #5c5550;
   font-style: italic;
 }

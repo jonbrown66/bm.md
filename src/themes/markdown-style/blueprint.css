@@ -27,10 +27,11 @@
   color: #1e293b;
   background-color: #f5f4ef;
   font-family:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang SC', 'Microsoft YaHei',
-    sans-serif;
-  font-size: 16px;
-  line-height: 1.7;
+    'GT Standard L Regular', 'GT Standard L Regular Placeholder', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC',
+    'Source Han Sans SC', 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
   padding: 1.25em 1em;
   border: 1px solid #e2e8f0;
 }
@@ -46,15 +47,17 @@
 #bm-md h4,
 #bm-md h5,
 #bm-md h6 {
-  font-family: Georgia, 'Times New Roman', 'Songti SC', 'SimSun', serif;
-  font-weight: 600;
-  line-height: 1.3;
+  font-family:
+    'GT Standard L Regular', 'GT Standard L Regular Placeholder', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC',
+    'Source Han Sans SC', 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif;
+  font-weight: 400;
   margin-top: 1.25em;
   margin-bottom: 0.4em;
 }
 
 #bm-md h1 {
-  font-size: 1.875em;
+  font-size: 34px;
+  line-height: 40px;
   color: #0751cf;
   text-align: center;
   padding-bottom: 0.4em;
@@ -63,14 +66,16 @@
 }
 
 #bm-md h2 {
-  font-size: 1.5em;
+  font-size: 24px;
+  line-height: 30px;
   color: #1d4ed8;
   padding-bottom: 0.25em;
   border-bottom: 1px solid #e2e8f0;
 }
 
 #bm-md h3 {
-  font-size: 1.25em;
+  font-size: 20px;
+  line-height: 26px;
   color: #334155;
 }
 
@@ -89,16 +94,19 @@
 }
 
 #bm-md h4 {
-  font-size: 1.125em;
+  font-size: 18px;
+  line-height: 23px;
 }
 
 #bm-md h5 {
-  font-size: 1em;
+  font-size: 16px;
+  line-height: 21px;
   font-style: italic;
 }
 
 #bm-md h6 {
-  font-size: 0.9375em;
+  font-size: 14px;
+  line-height: 20px;
   font-style: italic;
 }
 
@@ -153,13 +161,13 @@
 }
 
 #bm-md small {
-  font-size: 0.875em;
+  font-size: 12px;
   color: #64748b;
 }
 
 #bm-md sup,
 #bm-md sub {
-  font-size: 0.75em;
+  font-size: 12px;
   line-height: 0;
 }
 
@@ -202,7 +210,7 @@
 #bm-md samp,
 #bm-md tt {
   font-family: 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
-  font-size: 0.875em;
+  font-size: 13px;
   background-color: #f8fafc;
   color: #475569;
   padding: 0.1em 0.3em;
@@ -338,7 +346,7 @@
 
 #bm-md code {
   font-family: 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
-  font-size: 0.875em;
+  font-size: 13px;
   background-color: #f0f9ff;
   color: #0369a1;
   padding: 0.15em 0.35em;
@@ -359,8 +367,8 @@
   color: inherit;
   padding: 0;
   border: none;
-  font-size: 0.875em;
-  line-height: 1.5;
+  font-size: 13px;
+  line-height: 20px;
 }
 
 /* ============================================
@@ -371,7 +379,7 @@
   width: 100%;
   margin: 1em 0;
   border-collapse: collapse;
-  font-size: 0.9375em;
+  font-size: 13px;
 }
 
 #bm-md tr:first-child th {
@@ -401,7 +409,7 @@
 #bm-md .frontmatter-table {
   width: auto;
   margin-bottom: 1.25em;
-  font-size: 0.875em;
+  font-size: 13px;
   border: none;
   border-bottom: 1px solid #e2e8f0;
 }
@@ -472,7 +480,7 @@
 
 #bm-md figcaption {
   margin-top: 0.4em;
-  font-size: 0.8125em;
+  font-size: 13px;
   color: #64748b;
   font-style: italic;
 }
@@ -485,7 +493,7 @@
   margin-top: 1.5em;
   padding-top: 0.75em;
   border-top: 1px solid #e2e8f0;
-  font-size: 0.875em;
+  font-size: 12px;
   color: #64748b;
 }
 
@@ -494,7 +502,7 @@
 }
 
 #bm-md .footnote-ref {
-  font-size: 0.75em;
+  font-size: 12px;
   vertical-align: super;
   color: #0751cf;
   font-weight: 600;
@@ -537,7 +545,7 @@
 
 #bm-md kbd {
   font-family: 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
-  font-size: 0.8125em;
+  font-size: 12px;
   display: inline-block;
   padding: 0.15em 0.4em;
   background-color: #f8fafc;
@@ -677,7 +685,7 @@
 
 #bm-md .meta,
 #bm-md time {
-  font-size: 0.875em;
+  font-size: 12px;
   color: #64748b;
   font-style: normal;
 }
