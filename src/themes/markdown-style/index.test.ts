@@ -120,6 +120,6 @@ describe('markdown styles', () => {
     const cssPath = fileURLToPath(new URL('./professional.css', import.meta.url))
     const source = await readFile(cssPath, 'utf8')
 
-    expect(getRule(source, '#bm-md h2')).toContain('color: #a9d56b')
+    expect(getRule(source, '#bm-md h2')).toContain('color: #b8860b')
   })
 })

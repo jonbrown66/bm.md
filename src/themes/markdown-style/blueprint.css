@@ -29,9 +29,9 @@
   font-family:
     'GT Standard L Regular', 'GT Standard L Regular Placeholder', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC',
     'Source Han Sans SC', 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 400;
-  line-height: 18px;
+  line-height: 21px;
   padding: 1.25em 1em;
   border: 1px solid #e2e8f0;
 }
@@ -56,8 +56,8 @@
 }
 
 #bm-md h1 {
-  font-size: 34px;
-  line-height: 40px;
+  font-size: 30px;
+  line-height: 36px;
   color: #0751cf;
   text-align: center;
   padding-bottom: 0.4em;
@@ -66,16 +66,16 @@
 }
 
 #bm-md h2 {
-  font-size: 24px;
-  line-height: 30px;
+  font-size: 21px;
+  line-height: 27px;
   color: #1d4ed8;
   padding-bottom: 0.25em;
   border-bottom: 1px solid #e2e8f0;
 }
 
 #bm-md h3 {
-  font-size: 20px;
-  line-height: 26px;
+  font-size: 18px;
+  line-height: 24px;
   color: #334155;
 }
 
@@ -94,12 +94,12 @@
 }
 
 #bm-md h4 {
-  font-size: 18px;
-  line-height: 23px;
+  font-size: 16px;
+  line-height: 22px;
 }
 
 #bm-md h5 {
-  font-size: 16px;
+  font-size: 15px;
   line-height: 21px;
   font-style: italic;
 }

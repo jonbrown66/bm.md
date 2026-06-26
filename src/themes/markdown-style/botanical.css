@@ -36,9 +36,9 @@
   font-family:
     'GT Standard L Regular', 'GT Standard L Regular Placeholder', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC',
     'Source Han Sans SC', 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 400;
-  line-height: 18px;
+  line-height: 21px;
   padding: 1.5em 1.25em;
 }
 
@@ -63,8 +63,8 @@
 
 /* H1 - 深铜版绿，图鉴标题 */
 #bm-md h1 {
-  font-size: 34px;
-  line-height: 40px;
+  font-size: 30px;
+  line-height: 36px;
   color: #2e5d4e;
   text-align: center;
   padding-bottom: 0.45em;
@@ -73,8 +73,8 @@
 
 /* H2 - 章节标题，精致左边框 */
 #bm-md h2 {
-  font-size: 24px;
-  line-height: 30px;
+  font-size: 21px;
+  line-height: 27px;
   color: #2e5d4e;
   padding: 0.25em 0.75em;
   border-left: 3px solid #2e5d4e;
@@ -84,8 +84,8 @@
 
 /* H3 - 科属分类标题 */
 #bm-md h3 {
-  font-size: 20px;
-  line-height: 26px;
+  font-size: 18px;
+  line-height: 24px;
   color: #3a6b5a;
 }
 
@@ -104,13 +104,13 @@
 }
 
 #bm-md h4 {
-  font-size: 18px;
-  line-height: 23px;
+  font-size: 16px;
+  line-height: 22px;
 }
 
 #bm-md h5,
 #bm-md h6 {
-  font-size: 16px;
+  font-size: 15px;
   line-height: 21px;
   font-style: italic;
 }
