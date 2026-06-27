@@ -1,37 +1,46 @@
+import { debounce } from 'es-toolkit'
 import { Download } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { mermaidConfig } from '@/config/mermaid'
 import { exportXhsImages } from '@/lib/actions'
 import { getMarkdownLocaleTexts } from '@/lib/locale'
 import { useEditorStore } from '@/stores/editor'
 import { useFilesStore } from '@/stores/files'
-import { usePreviewStore } from '@/stores/preview'
+import { PREVIEW_WIDTH_MOBILE, usePreviewStore } from '@/stores/preview'
 
-const XHS_PAGE_WIDTH = 1080
-const XHS_PAGE_HEIGHT = 1440
-const XHS_PREVIEW_WIDTH = 520
+const XHS_PAGE_WIDTH = 720
+const XHS_PAGE_HEIGHT = 960
+const XHS_PREVIEW_WIDTH = 540
 const XHS_PREVIEW_SCALE = XHS_PREVIEW_WIDTH / XHS_PAGE_WIDTH
-const XHS_PAGE_PADDING = 96
-const XHS_PAGE_BACKGROUND = '#fdfbf7'
-const XHS_PAGE_FOOTER_SAFE_AREA = 132
-const XHS_USABLE_PAGE_HEIGHT = XHS_PAGE_HEIGHT - XHS_PAGE_FOOTER_SAFE_AREA
-const XHS_MIN_TRAILING_SPACE = 160
-const XHS_SPARSE_PAGE_HEIGHT = 260
+const XHS_SOURCE_WIDTH = PREVIEW_WIDTH_MOBILE
+const XHS_SOURCE_SCALE = XHS_PAGE_WIDTH / XHS_SOURCE_WIDTH
+const XHS_SOURCE_PAGE_HEIGHT = XHS_PAGE_HEIGHT / XHS_SOURCE_SCALE
+const XHS_SOURCE_FOOTER_SAFE_AREA = 34
+const XHS_USABLE_PAGE_HEIGHT = XHS_SOURCE_PAGE_HEIGHT - XHS_SOURCE_FOOTER_SAFE_AREA
+const XHS_MIN_TRAILING_SPACE = 70
+const XHS_SPARSE_PAGE_HEIGHT = 112
 const XHS_PAGE_HEIGHT_TOLERANCE = 1
+const XHS_RENDER_DEBOUNCE_MS = 250
+
+const XHS_THEME_SURFACES: Record<string, string> = {
+  botanical: '#f7f5f0',
+  kiko: '#f5f4ef',
+  professional: '#fafaf8',
+}
+
+function getXhsPageBackground(markdownStyle: string) {
+  return XHS_THEME_SURFACES[markdownStyle] ?? XHS_THEME_SURFACES.professional
+}
 
 const XHS_ARTICLE_CSS = `
 .xhs-article {
-  width: 1080px;
-  min-height: 1440px;
+  width: ${XHS_SOURCE_WIDTH}px;
+  min-height: ${XHS_SOURCE_PAGE_HEIGHT}px;
   box-sizing: border-box;
-  padding: ${XHS_PAGE_PADDING}px;
-  background: ${XHS_PAGE_BACKGROUND};
-  color: #24211d;
-  font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
-  font-size: 30px;
-  line-height: 1.72;
-  letter-spacing: 0;
+  background: transparent;
+  letter-spacing: 0.03em;
+  padding: 36px 28px 48px 28px;
 }
 
 .xhs-article.xhs-measure-probe {
@@ -51,46 +60,151 @@ const XHS_ARTICLE_CSS = `
   box-sizing: border-box;
 }
 
+/* 重置 #bm-md 自身的默认样式，并进行小红书特化 */
 .xhs-article #bm-md {
   width: 100% !important;
   max-width: none !important;
   min-height: auto !important;
   margin: 0 !important;
   padding: 0 !important;
+  background: transparent !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif !important;
+  font-size: 12.5px !important;
+  line-height: 1.55 !important;
+}
+
+/* 优化段落和行内元素 */
+.xhs-article #bm-md p {
+  font-size: 12.5px !important;
+  line-height: 1.55 !important;
+  margin-top: 0 !important;
+  margin-bottom: 0.8em !important;
+  text-align: justify !important;
+}
+
+.xhs-article #bm-md strong {
+  font-weight: 700 !important;
+}
+
+/* 优化列表排版 */
+.xhs-article #bm-md ul,
+.xhs-article #bm-md ol {
+  padding-left: 1.5em !important;
+  margin-top: 0 !important;
+  margin-bottom: 0.8em !important;
+}
+
+.xhs-article #bm-md li {
+  font-size: 12px !important;
+  line-height: 1.5 !important;
+  margin-top: 0.4em !important;
+  margin-bottom: 0.4em !important;
+}
+
+/* 优化标题样式，使其大方、显眼且充满排版细节 */
+.xhs-article #bm-md h1,
+.xhs-article #bm-md h2,
+.xhs-article #bm-md h3,
+.xhs-article #bm-md h4,
+.xhs-article #bm-md h5,
+.xhs-article #bm-md h6 {
+  font-weight: 700 !important;
+  line-height: 1.3 !important;
+  margin-top: 1.2em !important;
+  margin-bottom: 0.6em !important;
+}
+
+.xhs-article #bm-md h1 {
+  font-size: 24px !important;
+}
+
+.xhs-article #bm-md h2 {
+  font-size: 20px !important;
+  border-bottom: none !important;
+  padding-bottom: 0 !important;
+}
+
+.xhs-article #bm-md h3 {
+  font-size: 18px !important;
+}
+
+.xhs-article #bm-md h4 {
+  font-size: 16px !important;
+}
+
+/* 优化引用块 */
+.xhs-article #bm-md blockquote {
+  margin: 0.8em 0 !important;
+  padding: 8px 14px !important;
+  border-left: 4px solid currentColor !important;
+  background: rgba(0, 0, 0, 0.02) !important;
+  border-radius: 0 6px 6px 0 !important;
+}
+
+.xhs-article #bm-md blockquote p {
+  font-size: 14px !important;
+  font-style: italic !important;
+  margin: 0 !important;
+  opacity: 0.85 !important;
 }
 
 .xhs-cover {
   display: flex;
-  min-height: calc(1440px - ${XHS_PAGE_PADDING * 2}px);
+  min-height: ${XHS_USABLE_PAGE_HEIGHT}px;
   flex-direction: column;
   justify-content: center;
-  gap: 34px;
+  gap: 18px;
+  padding: 48px 34px;
 }
 
 .xhs-cover-title {
-  max-width: 840px;
+  max-width: 100%;
   margin: 0 !important;
-  color: #1f1b16 !important;
-  font-size: 76px !important;
-  font-weight: 850 !important;
-  line-height: 1.08 !important;
+  font-size: 34px !important;
+  font-weight: 700 !important;
+  line-height: 1.16 !important;
 }
 
 .xhs-cover-subtitle {
-  max-width: 760px;
+  max-width: 100%;
   margin: 0 !important;
-  color: #6f665b !important;
-  font-size: 28px !important;
+  font-size: 15px !important;
   line-height: 1.55 !important;
+}
+
+.xhs-page[data-markdown-style="professional"] .xhs-cover-title,
+.xhs-page[data-markdown-style="professional"] .xhs-page-number {
+  color: #b8860b;
+}
+
+.xhs-page[data-markdown-style="professional"] .xhs-cover-subtitle {
+  color: #4a4a4a;
+}
+
+.xhs-page[data-markdown-style="botanical"] .xhs-cover-title,
+.xhs-page[data-markdown-style="botanical"] .xhs-page-number {
+  color: #2e5d4e;
+}
+
+.xhs-page[data-markdown-style="botanical"] .xhs-cover-subtitle {
+  color: #5c5550;
+}
+
+.xhs-page[data-markdown-style="kiko"] .xhs-cover-title,
+.xhs-page[data-markdown-style="kiko"] .xhs-page-number {
+  color: #0751cf;
+}
+
+.xhs-page[data-markdown-style="kiko"] .xhs-cover-subtitle {
+  color: #475569;
 }
 
 .xhs-page-number {
   position: absolute;
-  right: 96px;
-  bottom: 48px;
-  color: #9b9284;
+  right: 44px;
+  bottom: 34px;
   font-family: "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
-  font-size: 22px;
+  font-size: 16px;
   line-height: 1;
   letter-spacing: 0;
 }
@@ -119,100 +233,18 @@ const XHS_ARTICLE_CSS = `
   margin-bottom: 0 !important;
 }
 
-.xhs-article h1,
-.xhs-article h2,
-.xhs-article h3,
-.xhs-article h4,
-.xhs-article h5,
-.xhs-article h6 {
-  letter-spacing: 0 !important;
-}
-
-.xhs-article h1 {
-  margin: 0 0 34px !important;
-  padding-bottom: 22px !important;
-  border-bottom: 4px solid #d8aa4e !important;
-  font-size: 48px !important;
-  line-height: 1.24 !important;
-  font-weight: 800 !important;
-  text-align: left !important;
-}
-
-.xhs-article h2 {
-  margin: 52px 0 22px !important;
-  font-size: 40px !important;
-  line-height: 1.32 !important;
-  font-weight: 800 !important;
-}
-
-.xhs-article h3 {
-  margin: 40px 0 18px !important;
-  font-size: 34px !important;
-  line-height: 1.4 !important;
-  font-weight: 750 !important;
-}
-
-.xhs-article h4,
-.xhs-article h5,
-.xhs-article h6 {
-  margin: 34px 0 16px !important;
-  font-size: 30px !important;
-  line-height: 1.45 !important;
-  font-weight: 800 !important;
-}
-
-.xhs-article p,
-.xhs-article li,
-.xhs-article blockquote,
-.xhs-article td,
-.xhs-article th {
-  font-size: 30px !important;
-  line-height: 1.72 !important;
-}
-
-.xhs-article p {
-  margin: 20px 0 !important;
-}
-
-.xhs-article ul,
-.xhs-article ol {
-  margin: 22px 0 !important;
-  padding-left: 42px !important;
-}
-
-.xhs-article li {
-  margin: 10px 0 !important;
-}
-
-.xhs-article strong {
-  font-weight: 800 !important;
-}
-
-.xhs-article blockquote {
-  margin: 30px 0 !important;
-  padding: 28px 32px !important;
-  border: 1px solid #e1c995 !important;
-  border-left: 10px solid #d8aa4e !important;
-  border-radius: 18px !important;
-  background: #f6edd9 !important;
-  color: #33291d !important;
-}
-
 .xhs-article img,
 .xhs-article video,
 .xhs-article svg {
   display: block !important;
   max-width: 100% !important;
-  max-height: 760px !important;
-  width: auto !important;
+  max-height: 430px !important;
   height: auto !important;
-  margin: 34px auto !important;
-  border-radius: 18px !important;
   object-fit: contain !important;
 }
 
 .xhs-article figure {
-  margin: 34px 0 !important;
+  width: 100% !important;
   break-inside: avoid !important;
 }
 
@@ -224,10 +256,6 @@ const XHS_ARTICLE_CSS = `
   overflow: visible !important;
   overflow-x: visible !important;
   overflow-y: visible !important;
-  margin: 30px 0 !important;
-  border-radius: 18px !important;
-  font-size: 25px !important;
-  line-height: 1.62 !important;
   white-space: pre-wrap !important;
 }
 
@@ -240,9 +268,6 @@ const XHS_ARTICLE_CSS = `
   min-width: 0 !important;
   width: 100% !important;
   max-width: 100% !important;
-  font-family: "SF Mono", Consolas, "Liberation Mono", Menlo, monospace !important;
-  font-size: 25px !important;
-  line-height: 1.62 !important;
   white-space: pre-wrap !important;
   overflow-wrap: anywhere !important;
   word-break: break-word !important;
@@ -256,34 +281,14 @@ const XHS_ARTICLE_CSS = `
   word-break: break-word !important;
 }
 
-.xhs-article :not(pre) > code {
-  font-size: 0.86em !important;
-}
-
 .xhs-article table {
   width: 100% !important;
-  margin: 30px 0 !important;
-  border-collapse: collapse !important;
-  font-size: 24px !important;
   break-inside: avoid !important;
 }
 
 .xhs-article th,
 .xhs-article td {
-  padding: 14px 16px !important;
-  border: 1px solid #d8d0c0 !important;
-  font-size: 24px !important;
-  line-height: 1.45 !important;
   vertical-align: top !important;
-}
-
-.xhs-article th {
-  background: #f4ead6 !important;
-  font-weight: 800 !important;
-}
-
-.xhs-article hr {
-  margin: 42px 0 !important;
 }
 `
 
@@ -331,33 +336,54 @@ async function renderMermaidNodes(container: HTMLElement) {
 
 function XhsPage({
   html,
+  markdownStyle,
   pageNumber,
   pageCount,
   exportPage = false,
 }: {
   html: string
+  markdownStyle: string
   pageNumber?: number
   pageCount?: number
   exportPage?: boolean
 }) {
+  const pageBackground = getXhsPageBackground(markdownStyle)
+
   return (
     <div
       data-xhs-export-page={exportPage ? 'true' : undefined}
-      className="relative overflow-hidden text-black shadow-sm"
+      data-markdown-style={markdownStyle}
+      className="xhs-page relative overflow-hidden text-black shadow-sm"
       style={{
         width: XHS_PAGE_WIDTH,
         height: XHS_PAGE_HEIGHT,
-        background: XHS_PAGE_BACKGROUND,
+        background: pageBackground,
       }}
     >
       <div
-        className="absolute inset-x-0"
-        style={{ top: 0 }}
+        className="absolute top-0 left-0"
+        style={{
+          width: XHS_SOURCE_WIDTH,
+          height: XHS_SOURCE_PAGE_HEIGHT,
+          transform: `scale(${XHS_SOURCE_SCALE})`,
+          transformOrigin: 'top left',
+        }}
       >
         <div
           className={pageNumber ? 'xhs-article xhs-page-article' : 'xhs-article'}
-          dangerouslySetInnerHTML={{ __html: html }}
-        />
+        >
+          {pageNumber
+            ? (
+                <div
+                  id="bm-md"
+                  style={{ background: 'transparent', padding: 0, margin: 0, width: '100%', minHeight: 'auto' }}
+                  dangerouslySetInnerHTML={{ __html: html }}
+                />
+              )
+            : (
+                <div dangerouslySetInnerHTML={{ __html: html }} />
+              )}
+        </div>
       </div>
       {pageNumber && pageCount && (
         <div className="xhs-page-number">
@@ -397,7 +423,7 @@ function createArticleProbe() {
 }
 
 function getArticleHeight(probe: HTMLElement, html: string) {
-  probe.innerHTML = html
+  probe.innerHTML = `<div id="bm-md" style="background: transparent; padding: 0; margin: 0; width: 100%; min-height: auto;">${html}</div>`
 
   return Math.ceil(Math.max(
     probe.scrollHeight,
@@ -961,6 +987,7 @@ async function inlineRemoteImages(container: HTMLElement) {
 
 export function XhsPreview() {
   const content = useFilesStore(state => state.currentContent)
+  const deferredContent = useDeferredValue(content)
   const enableFootnoteLinks = useEditorStore(state => state.enableFootnoteLinks)
   const openLinksInNewWindow = useEditorStore(state => state.openLinksInNewWindow)
   const markdownStyle = usePreviewStore(state => state.markdownStyle)
@@ -974,50 +1001,62 @@ export function XhsPreview() {
   const measureRef = useRef<HTMLDivElement>(null)
   const exportPagesRef = useRef<HTMLDivElement>(null)
   const overflowFixCountRef = useRef(0)
+  const renderSeqRef = useRef(0)
   const [renderedPages, setRenderedPages] = useState<XhsRenderedPage[]>([])
   const [isRendering, setIsRendering] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
 
-  useEffect(() => {
-    let canceled = false
-
-    async function renderHtml() {
+  const scheduleRender = useMemo(
+    () => debounce(async (
+      seq: number,
+      nextContent: string,
+      styleId: string,
+      themeId: string,
+      customCssValue: string,
+      enableRefLinks: boolean,
+      openNewWin: boolean,
+    ) => {
       setIsRendering(true)
       try {
         const { markdown } = await import('@/lib/markdown/browser')
         const result = await markdown.render({
-          markdown: content,
-          markdownStyle,
-          codeTheme,
-          customCss,
-          enableFootnoteLinks,
-          openLinksInNewWindow,
+          markdown: nextContent,
+          markdownStyle: styleId,
+          codeTheme: themeId,
+          customCss: customCssValue,
+          enableFootnoteLinks: enableRefLinks,
+          openLinksInNewWindow: openNewWin,
           ...getMarkdownLocaleTexts(),
         })
 
-        if (!canceled) {
+        if (seq === renderSeqRef.current) {
           setRenderedHtml('html', result.result)
         }
       }
       catch (error) {
-        if (!canceled) {
+        if (seq === renderSeqRef.current) {
           const message = error instanceof Error ? error.message : '转换失败'
           setRenderedHtml('html', message)
         }
       }
       finally {
-        if (!canceled) {
+        if (seq === renderSeqRef.current) {
           setIsRendering(false)
         }
       }
-    }
+    }, XHS_RENDER_DEBOUNCE_MS),
+    [setRenderedHtml],
+  )
 
-    void renderHtml()
+  useEffect(() => {
+    const seq = renderSeqRef.current + 1
+    renderSeqRef.current = seq
+    scheduleRender(seq, deferredContent, markdownStyle, codeTheme, customCss, enableFootnoteLinks, openLinksInNewWindow)
 
     return () => {
-      canceled = true
+      scheduleRender.cancel()
     }
-  }, [content, markdownStyle, codeTheme, customCss, enableFootnoteLinks, openLinksInNewWindow, setRenderedHtml])
+  }, [deferredContent, markdownStyle, codeTheme, customCss, enableFootnoteLinks, openLinksInNewWindow, scheduleRender])
 
   const calculatePages = useCallback(async () => {
     const measure = measureRef.current
@@ -1146,7 +1185,7 @@ export function XhsPreview() {
         </Button>
       </div>
 
-      <div className="relative flex-1 overflow-auto bg-editor p-6">
+      <div className="relative flex-1 overflow-auto bg-editor px-6 py-8">
         <div
           ref={measureRef}
           className={`
@@ -1165,6 +1204,7 @@ export function XhsPreview() {
             <XhsPage
               key={`export-${page.id}`}
               html={page.html}
+              markdownStyle={markdownStyle}
               pageNumber={page.id === 'cover' ? undefined : index + 1}
               pageCount={page.id === 'cover' ? undefined : renderedPages.length}
               exportPage
@@ -1183,9 +1223,12 @@ export function XhsPreview() {
         )}
 
         {hasContent && (
-          <div className="mx-auto flex w-full max-w-[580px] flex-col gap-8">
+          <div className="mx-auto flex w-fit flex-col items-center gap-10">
             {renderedPages.map((page, index) => (
-              <div key={`preview-${page.id}`} className="flex flex-col gap-2">
+              <div
+                key={`preview-${page.id}`}
+                className="flex w-fit flex-col items-center gap-3"
+              >
                 <div className="text-center text-xs text-muted-foreground">
                   {index + 1}
                   {' '}
@@ -1197,7 +1240,7 @@ export function XhsPreview() {
                   style={{
                     width: XHS_PREVIEW_WIDTH,
                     height: XHS_PAGE_HEIGHT * XHS_PREVIEW_SCALE,
-                    background: XHS_PAGE_BACKGROUND,
+                    background: getXhsPageBackground(markdownStyle),
                   }}
                 >
                   <div
@@ -1210,6 +1253,7 @@ export function XhsPreview() {
                   >
                     <XhsPage
                       html={page.html}
+                      markdownStyle={markdownStyle}
                       pageNumber={page.id === 'cover' ? undefined : index + 1}
                       pageCount={page.id === 'cover' ? undefined : renderedPages.length}
                     />

@@ -1,7 +1,7 @@
 /* eslint-disable react-dom/no-unsafe-iframe-sandbox -- 预览 iframe 需要同源 DOM 访问和脚本执行来渲染 Mermaid 与同步内容。 */
 import { debounce } from 'es-toolkit'
 import morphdom from 'morphdom'
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef } from 'react'
 import { usePreviewScrollSync } from '@/components/markdown/hooks/use-scroll-sync'
 import { Phone } from '@/components/mockups/iphone'
 import { Safari } from '@/components/mockups/safari'
@@ -61,6 +61,7 @@ async function renderMermaidNodes(nodes: HTMLElement[], iframeDoc: Document | nu
 
 export default function MarkdownRender() {
   const content = useFilesStore(state => state.currentContent)
+  const deferredContent = useDeferredValue(content)
   const enableScrollSync = useEditorStore(state => state.enableScrollSync)
   const enableFootnoteLinks = useEditorStore(state => state.enableFootnoteLinks)
   const openLinksInNewWindow = useEditorStore(state => state.openLinksInNewWindow)
@@ -70,7 +71,6 @@ export default function MarkdownRender() {
   const customCss = usePreviewStore(state => state.customCss)
   const renderedHtml = usePreviewStore(state => state.getRenderedHtml('html'))
   const setRenderedHtml = usePreviewStore(state => state.setRenderedHtml)
-  const clearRenderedHtmlCache = usePreviewStore(state => state.clearRenderedHtmlCache)
 
   const { iframeRef, onIframeLoad: onScrollSyncLoad } = usePreviewScrollSync({
     enabled: enableScrollSync,
@@ -78,7 +78,7 @@ export default function MarkdownRender() {
 
   const iframeReadyRef = useRef(false)
   const pendingHtmlRef = useRef<string | null>(null)
-  const canceledRef = useRef(false)
+  const renderSeqRef = useRef(0)
   const renderedHtmlRef = useRef(renderedHtml)
 
   useEffect(() => {
@@ -174,6 +174,7 @@ export default function MarkdownRender() {
 
   const scheduleRender = useMemo(
     () => debounce(async (
+      seq: number,
       nextContent: string,
       styleId: string,
       themeId: string,
@@ -193,12 +194,12 @@ export default function MarkdownRender() {
           ...getMarkdownLocaleTexts(),
         })
 
-        if (!canceledRef.current) {
+        if (seq === renderSeqRef.current) {
           setRenderedHtml('html', result.result)
         }
       }
       catch (error) {
-        if (!canceledRef.current) {
+        if (seq === renderSeqRef.current) {
           const message = error instanceof Error ? error.message : '转换失败'
           setRenderedHtml('html', message)
         }
@@ -208,15 +209,14 @@ export default function MarkdownRender() {
   )
 
   useEffect(() => {
-    clearRenderedHtmlCache()
-    canceledRef.current = false
-    scheduleRender(content, markdownStyle, codeTheme, customCss, enableFootnoteLinks, openLinksInNewWindow)
+    const seq = renderSeqRef.current + 1
+    renderSeqRef.current = seq
+    scheduleRender(seq, deferredContent, markdownStyle, codeTheme, customCss, enableFootnoteLinks, openLinksInNewWindow)
 
     return () => {
-      canceledRef.current = true
       scheduleRender.cancel()
     }
-  }, [content, markdownStyle, codeTheme, customCss, enableFootnoteLinks, openLinksInNewWindow, scheduleRender, clearRenderedHtmlCache])
+  }, [deferredContent, markdownStyle, codeTheme, customCss, enableFootnoteLinks, openLinksInNewWindow, scheduleRender])
 
   const isMobile = previewWidth === PREVIEW_WIDTH_MOBILE
 

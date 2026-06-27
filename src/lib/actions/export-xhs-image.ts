@@ -137,7 +137,7 @@ function forceExportStyles(page: HTMLElement) {
     image.decoding = 'sync'
     image.style.setProperty('display', 'block', 'important')
     image.style.setProperty('height', 'auto', 'important')
-    image.style.setProperty('max-height', '760px', 'important')
+    image.style.setProperty('max-height', '500px', 'important')
     image.style.setProperty('max-width', '100%', 'important')
     image.style.setProperty('object-fit', 'contain', 'important')
     image.style.setProperty('visibility', 'visible', 'important')
@@ -205,7 +205,6 @@ export async function exportXhsImages() {
 
         const image = await snapshot.toPng({
           dpr: 1,
-          format: 'png',
           height: clone.offsetHeight,
           width: clone.offsetWidth,
         })

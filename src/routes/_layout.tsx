@@ -18,10 +18,16 @@ function App() {
   useEffect(() => {
     const prepareWorker = async () => {
       const { worker } = await import('@/lib/markdown/browser')
-      worker.prepare()
+      void worker.prepare()
     }
 
-    prepareWorker()
+    if ('requestIdleCallback' in window) {
+      const idleId = window.requestIdleCallback(prepareWorker)
+      return () => window.cancelIdleCallback(idleId)
+    }
+
+    const timeoutId = globalThis.setTimeout(prepareWorker, 1000)
+    return () => globalThis.clearTimeout(timeoutId)
   }, [])
 
   return (

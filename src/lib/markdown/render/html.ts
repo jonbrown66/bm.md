@@ -171,13 +171,35 @@ export async function render(options: RenderOptions): Promise<string> {
     codeTheme ? loadCodeThemeCss(codeTheme) : Promise.resolve(''),
     hasKatex ? loadKatexCss() : Promise.resolve(''),
   ])
-  const css = composeRenderCss({
+  let css = composeRenderCss({
     markdownStyle,
     markdownStyleCss: markdownStyleCss ?? '',
     codeThemeCss: codeThemeCss ?? '',
     katexCss: katexCss ?? '',
     customCss,
   })
+
+  if (platform === 'wechat') {
+    css += `
+      #bm-md {
+        padding: 0.8em 0.5em !important;
+      }
+      #bm-md p {
+        font-size: 15px !important;
+        line-height: 26px !important;
+      }
+      #bm-md li {
+        font-size: 15px !important;
+        line-height: 26px !important;
+      }
+      #bm-md img, #bm-md picture {
+        margin: 0.3em 0 !important;
+      }
+      #bm-md figure {
+        margin: 0.4em 0 !important;
+      }
+    `
+  }
 
   const codeThemeClass = codeTheme && darkCodeThemeIds.has(codeTheme) ? ' class="code-theme-dark"' : ''
   const wrapped = `<section id="bm-md"${codeThemeClass}>${html}</section>`
