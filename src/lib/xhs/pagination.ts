@@ -8,6 +8,36 @@ export interface XhsBlockRect {
   height: number
 }
 
+export interface MediaFitOptions {
+  availableHeight: number
+  blockHeight: number
+  mediaHeight: number
+  tolerance: number
+  minScale: number
+}
+
+export function getMediaFitScale({
+  availableHeight,
+  blockHeight,
+  mediaHeight,
+  tolerance,
+  minScale,
+}: MediaFitOptions): number | null {
+  if (availableHeight <= 0 || blockHeight <= 0 || mediaHeight <= 0) {
+    return null
+  }
+
+  if (blockHeight <= availableHeight + tolerance) {
+    return 1
+  }
+
+  const nonMediaHeight = blockHeight - mediaHeight
+  const targetMediaHeight = availableHeight + tolerance - nonMediaHeight
+  const scale = Math.min(1, targetMediaHeight / mediaHeight)
+
+  return scale >= minScale ? scale : null
+}
+
 export function paginateByHeight(totalHeight: number, pageHeight: number): XhsPageSlice[] {
   if (totalHeight <= 0 || pageHeight <= 0) {
     return []

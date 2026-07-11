@@ -18,7 +18,7 @@ import { loadCodeThemeCss } from '@/themes/code-theme/loader'
 import { loadMarkdownStyleCss } from '@/themes/markdown-style/loader'
 import { loadKatexCss } from '../utils'
 import { getAdapterPlugins } from './adapters'
-import { rehypeDivToSection, rehypeFigureWrapper, rehypeFootnoteLinks, rehypeWrapTextNodes, remarkFrontmatterTable, remarkMermaid } from './plugins'
+import { rehypeDivToSection, rehypeFigureWrapper, rehypeFootnoteLinks, rehypeMarkHighlight, rehypeWrapTextNodes, remarkFrontmatterTable, remarkMermaid } from './plugins'
 
 export interface RenderOptions {
   markdown: string
@@ -110,6 +110,7 @@ function createProcessor({ enableFootnoteLinks, openLinksInNewWindow, platform =
     .use(rehypeSanitize, sanitizeSchema)
     .use(rehypeKatex)
     .use(rehypeHighlight)
+    .use(rehypeMarkHighlight)
     .use(rehypeFigureWrapper)
 
   if (enableFootnoteLinks && platform !== 'wechat') {

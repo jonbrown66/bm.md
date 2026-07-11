@@ -4,28 +4,28 @@ export const mermaidConfig: MermaidConfig = {
   startOnLoad: false,
   theme: 'base',
   themeVariables: {
-    primaryColor: '#FF6B6B',
-    primaryTextColor: '#000000', // Black text
-    secondaryColor: '#4ECDC4',
-    secondaryTextColor: '#000000',
-    tertiaryColor: '#45B7D1',
-    tertiaryTextColor: '#000000',
-    textColor: '#000000',
-    nodeTextColor: '#000000',
-    mainBkg: '#FFFFFF',
-    nodeBorder: '#000000', // Black borders
-    clusterBkg: '#F5F5F5', // Light gray cluster background
-    clusterBorder: '#000000',
-    lineColor: '#000000',
-    fontFamily: '"Inter", "Segoe UI", sans-serif',
-    fontSize: '16px', // Larger font
+    primaryColor: '#e8eef8',
+    primaryTextColor: '#24364b',
+    secondaryColor: '#e7f1eb',
+    secondaryTextColor: '#29473a',
+    tertiaryColor: '#f5ecdf',
+    tertiaryTextColor: '#59412f',
+    textColor: '#273444',
+    nodeTextColor: '#273444',
+    mainBkg: '#fffefb',
+    nodeBorder: '#bcc9d8',
+    clusterBkg: '#f7f8fa',
+    clusterBorder: '#d8dde5',
+    lineColor: '#8290a3',
+    fontFamily: 'Inter, "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif',
+    fontSize: '18px',
   },
   flowchart: {
     htmlLabels: true,
-    curve: 'basis',
-    padding: 15,
-    nodeSpacing: 30, // Tighter spacing
-    rankSpacing: 40,
+    curve: 'bumpX',
+    padding: 18,
+    nodeSpacing: 42,
+    rankSpacing: 34,
   },
   securityLevel: 'loose',
 }

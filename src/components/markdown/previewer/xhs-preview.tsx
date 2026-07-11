@@ -1,6 +1,7 @@
+import type { XhsCoverDocument } from '@/lib/xhs/cover-document'
 import { Slider as SliderPrimitive } from '@base-ui/react/slider'
 import { debounce } from 'es-toolkit'
-import { Download, RotateCcw, SlidersHorizontal } from 'lucide-react'
+import { Download, Pencil, RotateCcw, SlidersHorizontal } from 'lucide-react'
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -11,11 +12,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { mermaidConfig } from '@/config/mermaid'
 import { exportXhsImage, exportXhsImages } from '@/lib/actions'
 import { getMarkdownLocaleTexts } from '@/lib/locale'
+import { createDefaultCoverDocument } from '@/lib/xhs/cover-document'
+import { getCoverDocument } from '@/lib/xhs/cover-storage'
 import { formatXhsPageFooter } from '@/lib/xhs/footer'
+import { padMermaidViewBox } from '@/lib/xhs/mermaid-style'
+import { getMediaFitScale } from '@/lib/xhs/pagination'
 import { getXhsFontOption, getXhsTextFlowCss, XHS_FONT_OPTIONS } from '@/lib/xhs/typography'
 import { useEditorStore } from '@/stores/editor'
 import { useFilesStore } from '@/stores/files'
 import { PREVIEW_WIDTH_MOBILE, usePreviewStore } from '@/stores/preview'
+import { XhsCoverCanvas } from './xhs-cover-canvas'
+import { XhsCoverEditor } from './xhs-cover-editor'
 
 const XHS_PAGE_WIDTH = 720
 const XHS_PAGE_HEIGHT = 960
@@ -30,9 +37,9 @@ const XHS_SOURCE_MEDIA_MAX_WIDTH = XHS_EXPORT_MEDIA_MAX_WIDTH
 const XHS_SOURCE_MEDIA_MAX_HEIGHT = XHS_EXPORT_MEDIA_MAX_HEIGHT
 const XHS_SOURCE_FOOTER_SAFE_AREA = Math.round(34 * XHS_LAYOUT_SCALE)
 const XHS_USABLE_PAGE_HEIGHT = XHS_SOURCE_PAGE_HEIGHT - XHS_SOURCE_FOOTER_SAFE_AREA
-const XHS_MIN_TRAILING_SPACE = Math.round(70 * XHS_LAYOUT_SCALE)
 const XHS_SPARSE_PAGE_HEIGHT = Math.round(112 * XHS_LAYOUT_SCALE)
-const XHS_PAGE_HEIGHT_TOLERANCE = 1
+const XHS_PAGE_HEIGHT_TOLERANCE = 45
+const XHS_MIN_MEDIA_FIT_SCALE = 0.7
 const XHS_RENDER_DEBOUNCE_MS = 250
 
 const XHS_THEME_SURFACES: Record<string, string> = {
@@ -251,6 +258,46 @@ ${getXhsTextFlowCss()}
   opacity: 0.85 !important;
 }
 
+/* 隐藏正文内的生硬分隔符，保持小红书卡片清爽 */
+.xhs-article #bm-md hr {
+  display: none !important;
+}
+
+/* 优化 markdown 中的 mark 高亮标记 (鹅黄色高亮) */
+.xhs-article #bm-md mark {
+  background-color: rgba(253, 224, 71, 0.45) !important;
+  color: inherit !important;
+  font-weight: 600 !important;
+  border-radius: ${3 * XHS_LAYOUT_SCALE}px !important;
+  padding: 0 ${3 * XHS_LAYOUT_SCALE}px !important;
+  margin: 0 ${1 * XHS_LAYOUT_SCALE}px !important;
+}
+
+.xhs-article #bm-md mark[data-highlight='red'] {
+  background-color: #f3d6d3 !important;
+  color: #693733 !important;
+}
+
+.xhs-article #bm-md mark[data-highlight='blue'] {
+  background-color: #d9e6f3 !important;
+  color: #304f6e !important;
+}
+
+.xhs-article #bm-md mark[data-highlight='green'] {
+  background-color: #dceadf !important;
+  color: #34563d !important;
+}
+
+.xhs-article #bm-md mark[data-highlight='purple'] {
+  background-color: #e7def0 !important;
+  color: #554069 !important;
+}
+
+.xhs-article #bm-md mark[data-highlight='gray'] {
+  background-color: #e7e8ea !important;
+  color: #444b55 !important;
+}
+
 .xhs-cover {
   display: flex;
   min-height: ${XHS_USABLE_PAGE_HEIGHT}px;
@@ -368,9 +415,9 @@ ${getXhsTextFlowCss()}
 
 .xhs-article figure.figure-image img {
   display: block !important;
-  width: ${XHS_SOURCE_MEDIA_MAX_WIDTH}px !important;
-  max-width: 100% !important;
-  height: ${XHS_SOURCE_MEDIA_MAX_HEIGHT}px !important;
+  width: auto !important;
+  max-width: min(100%, ${XHS_SOURCE_MEDIA_MAX_WIDTH}px) !important;
+  height: auto !important;
   max-height: ${XHS_SOURCE_MEDIA_MAX_HEIGHT}px !important;
   object-fit: contain !important;
   margin: 0 auto !important;
@@ -467,6 +514,147 @@ ${getXhsTextFlowCss()}
   overflow-wrap: anywhere !important;
   word-break: break-word !important;
 }
+
+.xhs-article .mermaid {
+  --fg: #0f172a;
+  --bg: #fffffe;
+
+  /* 基于 Two-Color Foundation 算法衍生调和色系 */
+  --text: var(--fg);
+  --text-muted: color-mix(in srgb, var(--fg) 60%, var(--bg));
+  --connectors: color-mix(in srgb, var(--fg) 40%, var(--bg));
+  --arrow: color-mix(in srgb, var(--fg) 75%, var(--bg));
+  --node-fill: color-mix(in srgb, var(--fg) 3%, var(--bg));
+  --node-border: color-mix(in srgb, var(--fg) 12%, var(--bg));
+  --subgraph-fill: color-mix(in srgb, var(--fg) 4%, var(--bg));
+  --subgraph-border: color-mix(in srgb, var(--fg) 18%, var(--bg));
+
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: ${16 * XHS_LAYOUT_SCALE}px 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
+  break-inside: avoid !important;
+  max-height: ${Math.round(XHS_USABLE_PAGE_HEIGHT * 0.8)}px !important;
+}
+
+.xhs-article .mermaid svg {
+  max-width: 100% !important;
+  max-height: 100% !important;
+  height: auto !important;
+  width: auto !important;
+  display: block !important;
+}
+
+/* === 运用 CSS 变量强行渲染 SVG 内部元素 === */
+
+/* 1. 节点（Nodes） */
+.xhs-article .mermaid svg .node rect,
+.xhs-article .mermaid svg .node circle,
+.xhs-article .mermaid svg .node polygon,
+.xhs-article .mermaid svg .node path {
+  fill: var(--node-fill) !important;
+  stroke: var(--node-border) !important;
+  stroke-width: ${1.5 * XHS_LAYOUT_SCALE}px !important;
+  rx: ${8 * XHS_LAYOUT_SCALE}px !important;
+  ry: ${8 * XHS_LAYOUT_SCALE}px !important;
+  filter: drop-shadow(0 ${2 * XHS_LAYOUT_SCALE}px ${4 * XHS_LAYOUT_SCALE}px rgba(0, 0, 0, 0.015)) !important;
+}
+
+/* 2. 连线（Edges）与箭头（Markers） */
+.xhs-article .mermaid svg .edgePath .path {
+  stroke: var(--connectors) !important;
+  stroke-width: ${1.5 * XHS_LAYOUT_SCALE}px !important;
+}
+
+.xhs-article .mermaid svg .marker {
+  fill: var(--arrow) !important;
+  stroke: none !important;
+}
+
+/* 3. 子图（Subgraph / Cluster） */
+.xhs-article .mermaid svg .cluster rect {
+  fill: var(--subgraph-fill) !important;
+  stroke: var(--subgraph-border) !important;
+  stroke-width: ${1 * XHS_LAYOUT_SCALE}px !important;
+  rx: ${12 * XHS_LAYOUT_SCALE}px !important;
+  ry: ${12 * XHS_LAYOUT_SCALE}px !important;
+}
+
+.xhs-article .mermaid svg .cluster .label {
+  font-weight: 600 !important;
+  fill: var(--text-muted) !important;
+}
+
+/* 4. 节点文本 */
+.xhs-article .mermaid svg .label,
+.xhs-article .mermaid svg .node .label,
+.xhs-article .mermaid svg .node .label * {
+  font-family: inherit !important;
+  font-weight: 500 !important;
+  fill: var(--text) !important;
+}
+
+/* 5. 连线文字背景与文字 */
+.xhs-article .mermaid svg .edgeLabel rect {
+  fill: #ffffff !important;
+  rx: ${4 * XHS_LAYOUT_SCALE}px !important;
+  ry: ${4 * XHS_LAYOUT_SCALE}px !important;
+}
+
+.xhs-article .mermaid svg .edgeLabel span {
+  color: var(--text-muted) !important;
+  font-size: 0.9em !important;
+}
+
+/* === 针对 classDef 类别的高级设计覆盖 === */
+/* 入口/起点 */
+.xhs-article .mermaid svg .node.entry rect,
+.xhs-article .mermaid svg .node.entry path {
+  fill: var(--fg) !important;
+  stroke: var(--fg) !important;
+}
+.xhs-article .mermaid svg .node.entry .label {
+  fill: var(--bg) !important;
+}
+
+/* 核心节点 */
+.xhs-article .mermaid svg .node.core rect,
+.xhs-article .mermaid svg .node.core path {
+  --node-fill: #eff6ff;
+  --node-border: #bfdbfe;
+  --text: #1e3a8a;
+}
+
+/* 扩展节点 */
+.xhs-article .mermaid svg .node.extension rect,
+.xhs-article .mermaid svg .node.extension path {
+  --node-fill: #fff7ed;
+  --node-border: #fed7aa;
+  --text: #7c2d12;
+}
+
+/* 工具/虚线框节点 */
+.xhs-article .mermaid svg .node.tools rect,
+.xhs-article .mermaid svg .node.tools path {
+  --node-fill: #f8fafc;
+  --node-border: #cbd5e1;
+  stroke-dasharray: ${4 * XHS_LAYOUT_SCALE}px ${3 * XHS_LAYOUT_SCALE}px !important;
+}
+
+/* 模型底座 */
+.xhs-article .mermaid svg .node.model rect,
+.xhs-article .mermaid svg .node.model path {
+  --node-fill: #fafafa;
+  --node-border: #cbd5e1;
+}
 `
 }
 
@@ -486,6 +674,40 @@ async function loadMermaid() {
   return mermaidPromise
 }
 
+// 将 SVG 字符串通过 Canvas 栅格化为高清 PNG data URL
+async function svgToPng(svgString: string, scale = 3): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    const svgData = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svgString)))}`
+
+    img.onload = () => {
+      const canvas = document.createElement('canvas')
+      canvas.width = img.width * scale
+      canvas.height = img.height * scale
+
+      const ctx = canvas.getContext('2d')
+      if (!ctx) {
+        reject(new Error('Failed to get canvas context'))
+        return
+      }
+
+      ctx.fillStyle = '#ffffff'
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+
+      try {
+        resolve(canvas.toDataURL('image/png'))
+      }
+      catch (e) {
+        reject(e)
+      }
+    }
+
+    img.onerror = () => reject(new Error('Failed to load SVG image'))
+    img.src = svgData
+  })
+}
+
 async function renderMermaidNodes(container: HTMLElement) {
   const nodes = Array.from(
     container.querySelectorAll('.mermaid:not([data-processed="true"])'),
@@ -497,12 +719,166 @@ async function renderMermaidNodes(container: HTMLElement) {
 
   const mermaid = await loadMermaid()
 
+  const state = usePreviewStore.getState()
+  const baseFontSize = state.xhsFontSize || 14
+  const xhsLayoutScale = 720 / 375
+  const targetFontSize = Math.round(baseFontSize * xhsLayoutScale * 1.45)
+
+  mermaid.initialize({
+    ...mermaidConfig,
+    themeVariables: {
+      ...mermaidConfig.themeVariables,
+      fontSize: `${Math.max(targetFontSize, 24)}px`,
+    },
+    flowchart: {
+      ...mermaidConfig.flowchart,
+      nodeSpacing: Math.round(26 * xhsLayoutScale),
+      rankSpacing: Math.round(18 * xhsLayoutScale),
+      padding: Math.round(10 * xhsLayoutScale),
+    },
+  })
+
   await Promise.all(nodes.map(async (node, index) => {
     try {
       const id = `xhs-mermaid-${Date.now()}-${index}`
-      const text = node.textContent || ''
-      const { svg } = await mermaid.render(id, text)
-      node.innerHTML = svg
+      const rawText = node.textContent || ''
+
+      // 剥离内联 %%{init: ... }%% 块，让底层配置生效
+      const text = rawText.replace(/%%\{init:[\s\S]*?\}%%/gi, '')
+
+      const { svg: rawSvg } = await mermaid.render(id, text)
+
+      // 预处理 SVG：补全尺寸属性、注入白底
+      const parser = new DOMParser()
+      const svgDoc = parser.parseFromString(rawSvg, 'image/svg+xml')
+      const svgEl = svgDoc.documentElement
+
+      const viewBox = svgEl.getAttribute('viewBox')
+      if (viewBox) {
+        const parts = viewBox.split(/\s+|,/).map(Number.parseFloat)
+        const [vx, vy, vw, vh] = parts
+        if ([vx, vy, vw, vh].every(value => value !== undefined && !Number.isNaN(value))) {
+          const padded = padMermaidViewBox({
+            x: vx ?? 0,
+            y: vy ?? 0,
+            width: vw ?? 0,
+            height: vh ?? 0,
+          })
+          svgEl.setAttribute('viewBox', `${padded.x} ${padded.y} ${padded.width} ${padded.height}`)
+          svgEl.setAttribute('width', `${padded.width}px`)
+          svgEl.setAttribute('height', `${padded.height}px`)
+          svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet')
+        }
+      }
+
+      // 白底 rect 防止透明背景在 Canvas 中变黑
+      const bgRect = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'rect')
+      bgRect.setAttribute('width', '100%')
+      bgRect.setAttribute('height', '100%')
+      bgRect.setAttribute('fill', '#ffffff')
+      if (svgEl.firstChild) {
+        svgEl.insertBefore(bgRect, svgEl.firstChild)
+      }
+      else {
+        svgEl.appendChild(bgRect)
+      }
+
+      // 将 beautiful-mermaid 风格的美化样式直接注入 SVG 内部，
+      // 因为 Canvas 栅格化时外部 CSS 不生效，必须内嵌。
+      // 颜色基于 Two-Color Foundation 预计算：fg=#0f172a, bg=#fffffe
+      const styleEl = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'style')
+      styleEl.textContent = `
+        /* 节点形状 */
+        .node rect, .node circle, .node polygon, .node path {
+          fill: #e8eef8 !important;
+          stroke: #bcc9d8 !important;
+          stroke-width: 1.75px !important;
+          rx: 12px;
+          ry: 12px;
+        }
+        .nodes > .node:nth-child(4n + 2) rect,
+        .nodes > .node:nth-child(4n + 2) circle,
+        .nodes > .node:nth-child(4n + 2) polygon,
+        .nodes > .node:nth-child(4n + 2) path {
+          fill: #e7f1eb !important;
+          stroke: #b9d2c2 !important;
+        }
+        .nodes > .node:nth-child(4n + 3) rect,
+        .nodes > .node:nth-child(4n + 3) circle,
+        .nodes > .node:nth-child(4n + 3) polygon,
+        .nodes > .node:nth-child(4n + 3) path {
+          fill: #f5ecdf !important;
+          stroke: #ddc7aa !important;
+        }
+        .nodes > .node:nth-child(4n) rect,
+        .nodes > .node:nth-child(4n) circle,
+        .nodes > .node:nth-child(4n) polygon,
+        .nodes > .node:nth-child(4n) path {
+          fill: #eee9f5 !important;
+          stroke: #cfc1df !important;
+        }
+        /* 连线 */
+        .edgePath .path {
+          stroke: #8290a3 !important;
+          stroke-width: 1.75px !important;
+        }
+        /* 箭头 */
+        marker path {
+          fill: #66758a !important;
+          stroke: none !important;
+        }
+        /* 子图 */
+        .cluster rect {
+          fill: #f7f8fa !important;
+          stroke: #d8dde5 !important;
+          stroke-width: 1px !important;
+          rx: 10px;
+          ry: 10px;
+        }
+        .cluster .nodeLabel {
+          font-weight: 600 !important;
+          color: #6f7380 !important;
+        }
+        /* 节点文本 */
+        .nodeLabel {
+          font-family: Inter, "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif !important;
+          font-size: ${Math.max(targetFontSize, 24)}px !important;
+          line-height: 1.35 !important;
+          font-weight: 600 !important;
+          color: #273444 !important;
+        }
+        /* 连线标签 */
+        .edgeLabel {
+          font-family: Inter, "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif !important;
+          font-size: ${Math.max(targetFontSize - 5, 18)}px !important;
+          font-weight: 500 !important;
+          color: #66758a !important;
+        }
+        .edgeLabel rect {
+          fill: #ffffff !important;
+          rx: 4px;
+          ry: 4px;
+        }
+        /* SVG text 元素兜底 */
+        text, tspan {
+          font-family: Inter, "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif !important;
+        }
+      `
+      // 插入到白底 rect 之后（确保 style 位于 SVG 前部生效）
+      if (bgRect.nextSibling) {
+        svgEl.insertBefore(styleEl, bgRect.nextSibling)
+      }
+      else {
+        svgEl.appendChild(styleEl)
+      }
+
+      const processedSvg = new XMLSerializer().serializeToString(svgEl)
+
+      // 3x Retina 栅格化为 PNG，字号被"烧录"进位图，不再受容器缩放影响
+      const pngDataUrl = await svgToPng(processedSvg, 3)
+
+      // 用 <img> 替换 SVG，html2canvas 可完美识别
+      node.innerHTML = `<img src="${pngDataUrl}" style="width: 100%; height: auto; display: block;" alt="Mermaid Diagram" />`
       node.setAttribute('data-processed', 'true')
     }
     catch (error) {
@@ -521,21 +897,20 @@ function cleanInlineStyles(html: string) {
 
 function XhsPage({
   html,
+  coverDocument,
   markdownStyle,
   authorName,
   footerLabel,
-  pageNumber,
   exportPage = false,
 }: {
-  html: string
+  html?: string
+  coverDocument?: XhsCoverDocument
   markdownStyle: string
   authorName: string
   footerLabel: string
-  pageNumber?: number
   exportPage?: boolean
 }) {
   const pageBackground = getXhsPageBackground(markdownStyle)
-  const cleanedHtml = useMemo(() => cleanInlineStyles(html), [html])
   const normalizedAuthor = authorName.trim()
   const normalizedFooter = footerLabel.trim()
 
@@ -550,32 +925,35 @@ function XhsPage({
         background: pageBackground,
       }}
     >
-      <div
-        className={pageNumber ? 'xhs-article xhs-page-article' : 'xhs-article'}
-      >
-        {pageNumber
-          ? (
+      {coverDocument
+        ? <XhsCoverCanvas document={coverDocument} />
+        : (
+            <div className="xhs-article xhs-page-article">
               <div
                 id="bm-md"
                 style={{ background: 'transparent', padding: 0, margin: 0, width: '100%', minHeight: 'auto' }}
-                dangerouslySetInnerHTML={{ __html: cleanedHtml }}
+                dangerouslySetInnerHTML={{ __html: html ?? '' }}
               />
-            )
-          : (
-              <div dangerouslySetInnerHTML={{ __html: cleanedHtml }} />
-            )}
-      </div>
+            </div>
+          )}
       {(normalizedAuthor || normalizedFooter) && (
-        <div
-          className={`
-            pointer-events-none absolute right-10 bottom-7 left-10 flex
-            items-end justify-between gap-6 text-[18px] leading-none
-            tracking-wide text-black/45
-          `}
-        >
-          <span className="min-w-0 truncate text-left">{normalizedAuthor}</span>
-          <span className="min-w-0 truncate text-right">{normalizedFooter}</span>
-        </div>
+        <>
+          {/* 页脚上方的精致分割线 */}
+          <div
+            className="absolute right-10 left-10 border-t border-black/10"
+            style={{ bottom: 54 }}
+          />
+          <div
+            className={`
+              pointer-events-none absolute right-10 bottom-7 left-10 flex
+              items-end justify-between gap-6 text-[18px] leading-none
+              tracking-wide text-black/45
+            `}
+          >
+            <span className="min-w-0 truncate text-left">{normalizedAuthor}</span>
+            <span className="min-w-0 truncate text-right">{normalizedFooter}</span>
+          </div>
+        </>
       )}
     </div>
   )
@@ -620,50 +998,112 @@ function fitsPage(probe: HTMLElement, html: string) {
   return getArticleHeight(probe, html) <= XHS_USABLE_PAGE_HEIGHT + XHS_PAGE_HEIGHT_TOLERANCE
 }
 
+function fitImageBlockToAvailableHeight(
+  probe: HTMLElement,
+  element: HTMLElement,
+  currentHtml: string,
+  minScale = XHS_MIN_MEDIA_FIT_SCALE,
+) {
+  const currentHeight = getArticleHeight(probe, currentHtml)
+  const candidateHeight = getArticleHeight(probe, `${currentHtml}${element.outerHTML}`)
+  const measuredElement = probe.querySelector<HTMLElement>('#bm-md')?.lastElementChild
+  if (!(measuredElement instanceof HTMLElement)) {
+    return null
+  }
+
+  const image = measuredElement.matches('img')
+    ? measuredElement as HTMLImageElement
+    : measuredElement.querySelector<HTMLImageElement>('img')
+  const mediaCount = measuredElement.matches('img, video, svg, canvas, iframe')
+    ? 1
+    : measuredElement.querySelectorAll('img, video, svg, canvas, iframe').length
+
+  if (!image || mediaCount !== 1) {
+    return null
+  }
+
+  const imageRect = image.getBoundingClientRect()
+  if (imageRect.width <= 0 || imageRect.height <= 0) {
+    return null
+  }
+
+  const blockHeight = candidateHeight - currentHeight
+  if (blockHeight <= 0) {
+    return null
+  }
+
+  const scale = getMediaFitScale({
+    availableHeight: XHS_USABLE_PAGE_HEIGHT - currentHeight,
+    blockHeight,
+    mediaHeight: imageRect.height,
+    tolerance: XHS_PAGE_HEIGHT_TOLERANCE,
+    minScale,
+  })
+
+  if (scale === null || scale === 1) {
+    return null
+  }
+
+  const fitted = element.cloneNode(true) as HTMLElement
+  const fittedImage = fitted.matches('img')
+    ? fitted as HTMLImageElement
+    : fitted.querySelector<HTMLImageElement>('img')
+  if (!fittedImage) {
+    return null
+  }
+
+  fittedImage.style.setProperty('width', `${Math.round(imageRect.width * scale)}px`, 'important')
+  fittedImage.style.setProperty('height', 'auto', 'important')
+  fittedImage.style.setProperty('max-height', 'none', 'important')
+
+  const fittedHtml = fitted.outerHTML
+  return fitsPage(probe, `${currentHtml}${fittedHtml}`) ? fittedHtml : null
+}
+
+function mergeImageOnlyPages(pages: XhsRenderedPage[], probe: HTMLElement) {
+  for (let index = 1; index < pages.length; index++) {
+    const previousPage = pages[index - 1]
+    const page = pages[index]
+    if (!previousPage || !page) {
+      continue
+    }
+
+    const container = document.createElement('div')
+    container.innerHTML = normalizePageHtml(page.html)
+    const onlyElement = container.children.length === 1 ? container.firstElementChild : null
+    if (!(onlyElement instanceof HTMLElement)) {
+      continue
+    }
+
+    const textProbe = onlyElement.cloneNode(true) as HTMLElement
+    textProbe.querySelectorAll('figcaption').forEach(caption => caption.remove())
+    const hasImage = onlyElement.matches('img') || Boolean(onlyElement.querySelector('img'))
+    if ((textProbe.textContent ?? '').trim().length > 0 || !hasImage) {
+      continue
+    }
+
+    const fittedHtml = fitImageBlockToAvailableHeight(
+      probe,
+      onlyElement,
+      previousPage.html,
+      0.05,
+    )
+    if (!fittedHtml) {
+      continue
+    }
+
+    previousPage.html = normalizePageHtml(`${previousPage.html}${fittedHtml}`)
+    pages.splice(index, 1)
+    index -= 1
+  }
+}
+
 function isHeadingTag(tagName: string) {
   return /^H[1-6]$/.test(tagName)
 }
 
 function isHeadingHtml(html: string) {
   return /^<h[1-6][\s>]/i.test(html)
-}
-
-function escapeHtml(value: string) {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll('\'', '&#39;')
-}
-
-function getCleanText(element: Element | null | undefined) {
-  return element?.textContent?.replace(/\s+/g, ' ').trim() ?? ''
-}
-
-function truncateText(text: string, maxLength: number) {
-  if (text.length <= maxLength) {
-    return text
-  }
-
-  return `${text.slice(0, maxLength).replace(/[，。；、,. ;:：]+$/u, '')}...`
-}
-
-function createCoverHtml(blockRoot: HTMLElement) {
-  const title = getCleanText(blockRoot.querySelector('h1'))
-    || getCleanText(blockRoot.querySelector('h2'))
-    || '未命名文章'
-  const subtitle = truncateText(Array.from(blockRoot.querySelectorAll('p'))
-    .map(getCleanText)
-    .find(text => text.length >= 12 && !text.startsWith('[!'))
-    ?? '', 34)
-
-  return `
-    <section class="xhs-cover">
-      <h1 class="xhs-cover-title">${escapeHtml(truncateText(title, 28))}</h1>
-      ${subtitle ? `<p class="xhs-cover-subtitle">${escapeHtml(subtitle)}</p>` : ''}
-    </section>
-  `
 }
 
 function splitTableIntoPages(
@@ -895,6 +1335,35 @@ function hasRenderableContent(html: string) {
   return Boolean(container.querySelector('img, video, svg, canvas, table, pre, hr, iframe'))
 }
 
+function isRenderableElement(element: Element) {
+  if ((element.textContent ?? '').replace(/\u00A0/g, ' ').trim().length > 0) {
+    return true
+  }
+
+  return Boolean(element.matches('img, video, svg, canvas, table, pre, hr, iframe')
+    || element.querySelector('img, video, svg, canvas, table, pre, hr, iframe'))
+}
+
+function normalizePageHtml(html: string) {
+  const container = document.createElement('div')
+  container.innerHTML = html
+
+  while (container.firstElementChild && !isRenderableElement(container.firstElementChild)) {
+    container.firstElementChild.remove()
+  }
+  while (container.lastElementChild && !isRenderableElement(container.lastElementChild)) {
+    container.lastElementChild.remove()
+  }
+
+  const firstElement = container.firstElementChild
+  if (firstElement?.tagName === 'H2') {
+    const firstHeading = firstElement as HTMLElement
+    firstHeading.style.setProperty('margin-top', '0', 'important')
+  }
+
+  return container.innerHTML
+}
+
 function removeBlankPages(pages: XhsRenderedPage[]) {
   for (let index = pages.length - 1; index >= 0; index--) {
     if (!hasRenderableContent(pages[index]?.html ?? '')) {
@@ -937,8 +1406,14 @@ function compactSparsePages(pages: XhsRenderedPage[], probe: HTMLElement) {
 }
 
 function normalizePageList(pages: XhsRenderedPage[], probe: HTMLElement) {
+  pages.forEach((page) => {
+    page.html = normalizePageHtml(page.html)
+  })
   removeBlankPages(pages)
   compactSparsePages(pages, probe)
+  pages.forEach((page) => {
+    page.html = normalizePageHtml(page.html)
+  })
   removeBlankPages(pages)
 }
 
@@ -1039,7 +1514,7 @@ function buildSemanticPages(
 
     pages.push({
       id: `semantic-${pages.length}`,
-      html: currentHtml.join(''),
+      html: normalizePageHtml(currentHtml.join('')),
     })
     currentHtml = []
   }
@@ -1088,19 +1563,15 @@ function buildSemanticPages(
       return
     }
 
-    const candidateHtml = [...currentHtml, element.outerHTML].join('')
+    const currentPageHtml = currentHtml.join('')
+    const candidateHtml = `${currentPageHtml}${element.outerHTML}`
     if (currentHtml.length > 0 && !fitsPage(probe, candidateHtml)) {
-      const trailingHeading = takeTrailingHeading()
-      if (trailingHeading) {
-        currentHtml = [trailingHeading]
+      const fittedHtml = fitImageBlockToAvailableHeight(probe, element, currentPageHtml)
+      if (fittedHtml) {
+        currentHtml.push(fittedHtml)
+        return
       }
-    }
 
-    if (
-      currentHtml.length > 0
-      && getArticleHeight(probe, element.outerHTML) < XHS_MIN_TRAILING_SPACE
-      && XHS_USABLE_PAGE_HEIGHT - getArticleHeight(probe, currentHtml.join('')) < XHS_MIN_TRAILING_SPACE
-    ) {
       const trailingHeading = takeTrailingHeading()
       if (trailingHeading) {
         currentHtml = [trailingHeading]
@@ -1117,18 +1588,8 @@ function buildSemanticPages(
         continue
       }
 
-      const isHeading = isHeadingTag(element.tagName)
       if (mode === 'semantic-block' && element.tagName === 'H2' && currentHtml.length > 0) {
         flush()
-      }
-
-      const nextElement = elements[index + 1]
-      if (isHeading && nextElement) {
-        const pairHtml = [...currentHtml, element.outerHTML, nextElement.outerHTML].join('')
-
-        if (currentHtml.length > 0 && !fitsPage(probe, pairHtml)) {
-          flush()
-        }
       }
 
       pushElement(element)
@@ -1148,11 +1609,10 @@ function buildSemanticPages(
     normalizePageList(pages, probe)
     normalizeOverflowPages(pages, probe)
     normalizePageList(pages, probe)
-
-    pages.unshift({
-      id: 'cover',
-      html: createCoverHtml(blockRoot),
-    })
+    if (mode === 'semantic-block') {
+      mergeImageOnlyPages(pages, probe)
+      normalizePageList(pages, probe)
+    }
 
     return pages
   }
@@ -1222,6 +1682,7 @@ async function inlineRemoteImages(container: HTMLElement) {
 
 export function XhsPreview() {
   const content = useFilesStore(state => state.currentContent)
+  const activeFileId = useFilesStore(state => state.activeFileId)
   const deferredContent = useDeferredValue(content)
   const enableFootnoteLinks = useEditorStore(state => state.enableFootnoteLinks)
   const openLinksInNewWindow = useEditorStore(state => state.openLinksInNewWindow)
@@ -1255,6 +1716,47 @@ export function XhsPreview() {
   const [exportingPageIndex, setExportingPageIndex] = useState<number | null>(null)
   const [preparedHtml, setPreparedHtml] = useState('')
   const [isPreparing, setIsPreparing] = useState(false)
+  const [coverDocument, setCoverDocument] = useState<XhsCoverDocument>(() => createDefaultCoverDocument(content))
+  const [coverEditorOpen, setCoverEditorOpen] = useState(false)
+  const [hasCustomCover, setHasCustomCover] = useState(false)
+
+  useEffect(() => {
+    if (!activeFileId) {
+      setCoverDocument(createDefaultCoverDocument(''))
+      setHasCustomCover(false)
+      return
+    }
+
+    let active = true
+    const load = async () => {
+      const stored = await getCoverDocument(activeFileId)
+      if (active) {
+        if (stored) {
+          setCoverDocument(stored)
+          setHasCustomCover(true)
+        }
+        else {
+          setCoverDocument(createDefaultCoverDocument(''))
+          setHasCustomCover(false)
+        }
+      }
+    }
+    void load()
+    return () => {
+      active = false
+    }
+  }, [activeFileId])
+
+  useEffect(() => {
+    if (!hasCustomCover) {
+      setCoverDocument(createDefaultCoverDocument(content))
+    }
+  }, [content, hasCustomCover])
+
+  const handleCoverSaved = (doc: XhsCoverDocument) => {
+    setCoverDocument(doc)
+    setHasCustomCover(true)
+  }
 
   const scheduleRender = useMemo(
     () => debounce(async (
@@ -1324,6 +1826,45 @@ export function XhsPreview() {
         await renderMermaidNodes(temp)
         await inlineRemoteImages(temp)
         await waitForImages(temp)
+
+        // 此时所有的 img 元素已经彻底加载完毕，naturalWidth 和 naturalHeight 均已就绪。
+        // 我们直接根据小红书的排版宽度（720px - padding）和图片最大尺寸限制（600x360），
+        // 利用等比缩放公式，像素级精确算出图片渲染高度，直接写死在 style 属性中！
+        // 这样可以彻底规避 DOM 异步解码和测量重排导致的 0 高度 Bug。
+        const state = usePreviewStore.getState()
+        const currentPadding = state.xhsPadding || 20
+        const scaledPadding = currentPadding * (720 / 375)
+        const maxAvailableWidth = 720 - 2 * scaledPadding
+        const maxWidth = Math.min(maxAvailableWidth, 600)
+        const maxHeight = 360
+
+        const images = Array.from(temp.querySelectorAll('img'))
+        images.forEach((img) => {
+          const nw = img.naturalWidth || 800
+          const nh = img.naturalHeight || 600
+
+          let targetWidth = maxWidth
+          let targetHeight = (nh / nw) * targetWidth
+
+          if (targetHeight > maxHeight) {
+            targetHeight = maxHeight
+            targetWidth = (nw / nh) * targetHeight
+          }
+          if (targetWidth > maxWidth) {
+            targetWidth = maxWidth
+            targetHeight = (nh / nw) * targetWidth
+          }
+
+          const originalStyle = img.getAttribute('style') || ''
+          const cleanedStyle = originalStyle
+            .replace(/width\s*:[^;"]+;?/gi, '')
+            .replace(/height\s*:[^;"]+;?/gi, '')
+
+          img.setAttribute(
+            'style',
+            `${cleanedStyle}${cleanedStyle && !cleanedStyle.endsWith(';') ? ';' : ''} width: ${Math.round(targetWidth)}px !important; height: ${Math.round(targetHeight)}px !important;`,
+          )
+        })
 
         if (active) {
           setPreparedHtml(temp.innerHTML)
@@ -1429,7 +1970,7 @@ export function XhsPreview() {
         return
       }
 
-      const overflowIndex = getOverflowingExportPageIndex(exportPages)
+      const overflowIndex = getOverflowingExportPageIndex(exportPages) - 1
       if (overflowIndex < 0) {
         return
       }
@@ -1459,7 +2000,7 @@ export function XhsPreview() {
       return '渲染中'
     }
 
-    return `共 ${renderedPages.length} 张`
+    return `共 ${renderedPages.length + 1} 张`
   }, [isRendering, isPreparing, renderedPages.length])
 
   const handleExport = async () => {
@@ -1483,6 +2024,7 @@ export function XhsPreview() {
   }
 
   const hasContent = renderedHtml.trim().length > 0
+  const totalPageCount = renderedPages.length + 1
 
   return (
     <div className="flex size-full flex-col overflow-hidden">
@@ -1674,7 +2216,7 @@ export function XhsPreview() {
         </div>
         <Button
           size="sm"
-          disabled={!hasContent || renderedPages.length === 0 || isRendering || isExporting || exportingPageIndex !== null}
+          disabled={!hasContent || isRendering || isExporting || exportingPageIndex !== null}
           onClick={handleExport}
         >
           <Download className="size-4" />
@@ -1697,6 +2239,13 @@ export function XhsPreview() {
           `}
           ref={exportPagesRef}
         >
+          <XhsPage
+            coverDocument={coverDocument}
+            markdownStyle={markdownStyle}
+            authorName={xhsAuthorName}
+            footerLabel={xhsShowFooter ? formatXhsPageFooter(1, totalPageCount) : ''}
+            exportPage
+          />
           {renderedPages.map((page, index) => (
             <XhsPage
               key={`export-${page.id}`}
@@ -1704,9 +2253,8 @@ export function XhsPreview() {
               markdownStyle={markdownStyle}
               authorName={xhsAuthorName}
               footerLabel={xhsShowFooter
-                ? formatXhsPageFooter(index + 1, renderedPages.length)
+                ? formatXhsPageFooter(index + 2, totalPageCount)
                 : ''}
-              pageNumber={page.id === 'cover' ? undefined : index + 1}
               exportPage
             />
           ))}
@@ -1724,16 +2272,76 @@ export function XhsPreview() {
 
         {hasContent && (
           <div className="mx-auto flex w-fit flex-col items-center gap-10">
+            <div className={`
+              group relative flex w-fit flex-col items-center gap-3
+            `}
+            >
+              <div className="text-center text-xs text-muted-foreground">
+                1 /
+                {' '}
+                {totalPageCount}
+              </div>
+              <div className={`
+                absolute top-7 -right-11 z-10 flex flex-col gap-2 opacity-0
+                group-focus-within:opacity-100
+                group-hover:opacity-100
+              `}
+              >
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="icon"
+                  className="size-8 rounded-md shadow-sm"
+                  disabled={!activeFileId}
+                  onClick={() => setCoverEditorOpen(true)}
+                  aria-label="编辑小红书封面"
+                  title="编辑小红书封面"
+                >
+                  <Pencil className="size-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="icon"
+                  className="size-8 rounded-md shadow-sm"
+                  disabled={isExporting || exportingPageIndex !== null}
+                  onClick={() => void handleExportPage(0)}
+                  aria-label="下载第 1 张图片"
+                  title="下载第 1 张图片"
+                >
+                  <Download className="size-4" />
+                </Button>
+              </div>
+              <div
+                className="origin-top overflow-hidden rounded-md border"
+                style={{
+                  width: XHS_PREVIEW_WIDTH,
+                  height: XHS_PAGE_HEIGHT * XHS_PREVIEW_SCALE,
+                  background: getXhsPageBackground(markdownStyle),
+                }}
+              >
+                <div style={{ width: XHS_PAGE_WIDTH, height: XHS_PAGE_HEIGHT, transform: `scale(${XHS_PREVIEW_SCALE})`, transformOrigin: 'top left' }}>
+                  <XhsPage
+                    coverDocument={coverDocument}
+                    markdownStyle={markdownStyle}
+                    authorName={xhsAuthorName}
+                    footerLabel={xhsShowFooter ? formatXhsPageFooter(1, totalPageCount) : ''}
+                  />
+                </div>
+              </div>
+            </div>
             {renderedPages.map((page, index) => (
               <div
                 key={`preview-${page.id}`}
-                className="group relative flex w-fit flex-col items-center gap-3"
+                className={`
+                  group relative flex w-fit flex-col items-center gap-3
+                `}
               >
                 <div className="text-center text-xs text-muted-foreground">
-                  {index + 1}
+                  {index + 2}
                   {' '}
                   /
-                  {renderedPages.length}
+                  {totalPageCount}
                 </div>
                 <Button
                   type="button"
@@ -1742,13 +2350,14 @@ export function XhsPreview() {
                   className={`
                     absolute top-7 -right-11 z-10 size-8 rounded-md opacity-0
                     shadow-sm
-                    group-hover:opacity-100 group-focus-within:opacity-100
+                    group-focus-within:opacity-100
+                    group-hover:opacity-100
                     focus-visible:opacity-100
                   `}
                   disabled={isExporting || exportingPageIndex !== null}
-                  onClick={() => void handleExportPage(index)}
-                  aria-label={`下载第 ${index + 1} 张图片`}
-                  title={`下载第 ${index + 1} 张图片`}
+                  onClick={() => void handleExportPage(index + 1)}
+                  aria-label={`下载第 ${index + 2} 张图片`}
+                  title={`下载第 ${index + 2} 张图片`}
                 >
                   <Download className="size-4" />
                 </Button>
@@ -1773,9 +2382,8 @@ export function XhsPreview() {
                       markdownStyle={markdownStyle}
                       authorName={xhsAuthorName}
                       footerLabel={xhsShowFooter
-                        ? formatXhsPageFooter(index + 1, renderedPages.length)
+                        ? formatXhsPageFooter(index + 2, totalPageCount)
                         : ''}
-                      pageNumber={page.id === 'cover' ? undefined : index + 1}
                     />
                   </div>
                 </div>
@@ -1784,6 +2392,15 @@ export function XhsPreview() {
           </div>
         )}
       </div>
+      {coverEditorOpen && activeFileId && (
+        <XhsCoverEditor
+          open={coverEditorOpen}
+          fileId={activeFileId}
+          document={coverDocument}
+          onOpenChange={setCoverEditorOpen}
+          onSaved={handleCoverSaved}
+        />
+      )}
     </div>
   )
 }

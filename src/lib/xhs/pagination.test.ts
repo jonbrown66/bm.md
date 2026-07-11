@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { paginateBlocks, paginateByHeight } from './pagination'
+import { getMediaFitScale, paginateBlocks, paginateByHeight } from './pagination'
 
 describe('xhs pagination', () => {
   it('returns no pages for empty height', () => {
@@ -39,5 +39,47 @@ describe('xhs pagination', () => {
       { top: 100, height: 100 },
       { top: 200, height: 50 },
     ])
+  })
+})
+
+describe('getMediaFitScale', () => {
+  it('keeps the original size when the block already fits', () => {
+    expect(getMediaFitScale({
+      availableHeight: 500,
+      blockHeight: 480,
+      mediaHeight: 300,
+      tolerance: 45,
+      minScale: 0.85,
+    })).toBe(1)
+  })
+
+  it('returns a bounded scale when a media block only slightly exceeds the page', () => {
+    expect(getMediaFitScale({
+      availableHeight: 500,
+      blockHeight: 560,
+      mediaHeight: 400,
+      tolerance: 45,
+      minScale: 0.85,
+    })).toBeCloseTo(0.9625)
+  })
+
+  it('rejects scaling when the media would need to shrink below the limit', () => {
+    expect(getMediaFitScale({
+      availableHeight: 300,
+      blockHeight: 560,
+      mediaHeight: 400,
+      tolerance: 45,
+      minScale: 0.85,
+    })).toBeNull()
+  })
+
+  it('uses substantial remaining space instead of moving the whole image', () => {
+    expect(getMediaFitScale({
+      availableHeight: 300,
+      blockHeight: 400,
+      mediaHeight: 360,
+      tolerance: 0,
+      minScale: 0.7,
+    })).toBeCloseTo(13 / 18)
   })
 })

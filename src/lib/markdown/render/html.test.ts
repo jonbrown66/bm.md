@@ -2,6 +2,22 @@ import { describe, expect, it } from 'vitest'
 import { composeRenderCss, render } from './html'
 
 describe('markdown -> html render (general)', () => {
+  it('renders default and named markdown highlights', async () => {
+    const html = await render({ markdown: '==默认== =={red}红色== =={blue}蓝色==' })
+
+    expect(html).toContain('data-highlight="yellow"')
+    expect(html).toContain('markdown-highlight-red')
+    expect(html).toContain('data-highlight="blue"')
+    expect(html).toContain('>红色</mark>')
+  })
+
+  it('falls back to yellow for unknown highlight colors', async () => {
+    const html = await render({ markdown: '=={pink}未知颜色==' })
+
+    expect(html).toContain('data-highlight="yellow"')
+    expect(html).toContain('>未知颜色</mark>')
+  })
+
   it('renders paragraphs as p elements', async () => {
     const html = await render({ markdown: '这是一个段落' })
 

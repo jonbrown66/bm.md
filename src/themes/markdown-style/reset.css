@@ -56,6 +56,37 @@
   margin: 0;
 }
 
+/* 可选色 Markdown 高亮：=={red}文本== */
+#bm-md mark[data-highlight='yellow'] {
+  background-color: #f6e7a8;
+  color: #493f1f;
+}
+
+#bm-md mark[data-highlight='red'] {
+  background-color: #f3d6d3;
+  color: #693733;
+}
+
+#bm-md mark[data-highlight='blue'] {
+  background-color: #d9e6f3;
+  color: #304f6e;
+}
+
+#bm-md mark[data-highlight='green'] {
+  background-color: #dceadf;
+  color: #34563d;
+}
+
+#bm-md mark[data-highlight='purple'] {
+  background-color: #e7def0;
+  color: #554069;
+}
+
+#bm-md mark[data-highlight='gray'] {
+  background-color: #e7e8ea;
+  color: #444b55;
+}
+
 /* ========================================
    Print Styles - 打印/导出 PDF 分页优化
    ======================================== */

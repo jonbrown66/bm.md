@@ -3,6 +3,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import defaultMarkdown from '@/docs/features.md?raw'
 import { deleteFileContent, getFileContent, saveFileContent } from '@/lib/file-storage'
+import { deleteCoverDocument } from '@/lib/xhs/cover-storage'
 
 export { defaultMarkdown }
 
@@ -171,6 +172,7 @@ export const useFilesStore = create<FilesState>()(
 
         try {
           await deleteFileContent(id)
+          await deleteCoverDocument(id)
         }
         catch (err) {
           console.error('删除文件内容失败:', err)
