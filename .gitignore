@@ -179,3 +179,4 @@ dev-dist/
 
 **/*.local*
 .claude
+.superpowers/
