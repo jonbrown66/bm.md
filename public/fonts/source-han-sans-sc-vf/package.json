@@ -1,0 +1,46 @@
+{
+  "name": "cn-fontsource-source-han-sans-sc-vf",
+  "description": "思源黑体: 仅包含简体的思源黑体，可提升加载速度",
+  "version": "1.0.10",
+  "repository": "https://github.com/wc-ex/cn-fontsource",
+  "font": {
+    "fontVersion": "Version 2.004;hotconv 1.0.118;makeotfexe 2.5.65603",
+    "familyName": "Source Han Sans SC VF",
+    "subfamilyName": "Regular",
+    "namedVariations": {
+      "ExtraLight": {
+        "wght": 250
+      },
+      "Light": {
+        "wght": 300
+      },
+      "Normal": {
+        "wght": 350
+      },
+      "Regular": {
+        "wght": 400
+      },
+      "Medium": {
+        "wght": 500
+      },
+      "Bold": {
+        "wght": 700
+      },
+      "Heavy": {
+        "wght": 900
+      }
+    },
+    "characterCount": 44812,
+    "buildInfo": {
+      "name": "思源黑体-简",
+      "description": "思源黑体: 仅包含简体的思源黑体，可提升加载速度",
+      "version": "1.0.10",
+      "fontFile": "SourceHanSansSC-VF.otf",
+      "extraFiles": [],
+      "download": "https://ghproxy.com/https://github.com/adobe-fonts/source-han-sans/raw/release/Variable/OTF/SourceHanSansSC-VF.otf",
+      "link": "https://github.com/adobe-fonts/source-han-sans",
+      "license": "SIL Open Font License, Version 1.1"
+    }
+  },
+  "license": "SIL Open Font License, Version 1.1"
+}

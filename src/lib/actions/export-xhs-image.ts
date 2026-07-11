@@ -17,7 +17,7 @@ async function fetchImageBlob(url: URL) {
     }
   }
   catch {
-    // 前端跨域读取失败时走同源代理兜底。
+    // 跨域读取失败时使用同源图片代理。
   }
 
   const proxied = await fetch(`/api/proxy/image?url=${encodeURIComponent(url.href)}`)
@@ -28,10 +28,14 @@ async function fetchImageBlob(url: URL) {
   return proxied.blob()
 }
 
-async function inlineRemoteImages(page: HTMLElement) {
-  const images = Array.from(page.querySelectorAll('img'))
+async function inlinePageImages(pages: HTMLElement[]) {
+  const images = pages.flatMap(page => Array.from(page.querySelectorAll('img')))
+  const dataUrlCache = new Map<string, Promise<string>>()
 
   await Promise.all(images.map(async (image) => {
+    image.loading = 'eager'
+    image.decoding = 'sync'
+
     const source = image.currentSrc || image.src
     if (!source || source.startsWith('data:') || source.startsWith('blob:')) {
       return
@@ -50,7 +54,13 @@ async function inlineRemoteImages(page: HTMLElement) {
     }
 
     try {
-      image.src = await blobToDataUrl(await fetchImageBlob(url))
+      let dataUrl = dataUrlCache.get(url.href)
+      if (!dataUrl) {
+        dataUrl = fetchImageBlob(url).then(blobToDataUrl)
+        dataUrlCache.set(url.href, dataUrl)
+      }
+
+      image.src = await dataUrl
       image.removeAttribute('srcset')
       image.removeAttribute('sizes')
     }
@@ -60,9 +70,7 @@ async function inlineRemoteImages(page: HTMLElement) {
   }))
 }
 
-async function waitForPageAssets(page: HTMLElement) {
-  await document.fonts.ready
-
+async function waitForPageImages(page: HTMLElement) {
   const images = Array.from(page.querySelectorAll('img'))
   await Promise.all(images.map(async (image) => {
     if (!image.complete) {
@@ -76,94 +84,9 @@ async function waitForPageAssets(page: HTMLElement) {
       await image.decode()
     }
     catch {
-      // 图片损坏时 decode 会失败，保留浏览器 fallback 让 snapdom 继续导出。
+      // 图片损坏时保留浏览器 fallback，让 SnapDOM 继续导出当前画面。
     }
   }))
-}
-
-function copyComputedStyles(source: Element, target: Element) {
-  if (!(source instanceof HTMLElement || source instanceof SVGElement)) {
-    return
-  }
-
-  if (!(target instanceof HTMLElement || target instanceof SVGElement)) {
-    return
-  }
-
-  const sourceStyle = window.getComputedStyle(source)
-  for (const property of sourceStyle) {
-    target.style.setProperty(
-      property,
-      sourceStyle.getPropertyValue(property),
-      sourceStyle.getPropertyPriority(property),
-    )
-  }
-}
-
-function freezeComputedStyles(sourceRoot: HTMLElement, targetRoot: HTMLElement) {
-  copyComputedStyles(sourceRoot, targetRoot)
-
-  const sourceElements = Array.from(sourceRoot.querySelectorAll('*'))
-  const targetElements = Array.from(targetRoot.querySelectorAll('*'))
-  sourceElements.forEach((sourceElement, index) => {
-    const targetElement = targetElements[index]
-    if (targetElement) {
-      copyComputedStyles(sourceElement, targetElement)
-    }
-  })
-}
-
-function forceExportStyles(page: HTMLElement) {
-  page.querySelectorAll<HTMLElement>('pre').forEach((pre) => {
-    pre.style.setProperty('max-width', '100%', 'important')
-    pre.style.setProperty('min-width', '0', 'important')
-    pre.style.setProperty('overflow', 'visible', 'important')
-    pre.style.setProperty('overflow-wrap', 'anywhere', 'important')
-    pre.style.setProperty('white-space', 'pre-wrap', 'important')
-    pre.style.setProperty('word-break', 'break-word', 'important')
-  })
-
-  page.querySelectorAll<HTMLElement>('pre code, pre code *').forEach((code) => {
-    code.style.setProperty('display', 'block', 'important')
-    code.style.setProperty('max-width', '100%', 'important')
-    code.style.setProperty('min-width', '0', 'important')
-    code.style.setProperty('overflow-wrap', 'anywhere', 'important')
-    code.style.setProperty('white-space', 'pre-wrap', 'important')
-    code.style.setProperty('word-break', 'break-word', 'important')
-  })
-
-  page.querySelectorAll<HTMLImageElement>('img').forEach((image) => {
-    image.loading = 'eager'
-    image.decoding = 'sync'
-    image.style.setProperty('display', 'block', 'important')
-    image.style.setProperty('height', 'auto', 'important')
-    image.style.setProperty('max-height', '500px', 'important')
-    image.style.setProperty('max-width', '100%', 'important')
-    image.style.setProperty('object-fit', 'contain', 'important')
-    image.style.setProperty('visibility', 'visible', 'important')
-    image.style.setProperty('width', 'auto', 'important')
-  })
-}
-
-async function createExportClone(page: HTMLElement) {
-  const clone = page.cloneNode(true) as HTMLElement
-  freezeComputedStyles(page, clone)
-  forceExportStyles(clone)
-
-  clone.style.position = 'fixed'
-  clone.style.top = '0'
-  clone.style.left = '0'
-  clone.style.zIndex = '-1'
-  clone.style.pointerEvents = 'none'
-  clone.style.boxShadow = 'none'
-  clone.style.transform = 'none'
-
-  document.body.appendChild(clone)
-
-  await inlineRemoteImages(clone)
-  await waitForPageAssets(clone)
-
-  return clone
 }
 
 function downloadPngImage(image: HTMLImageElement, filename: string) {
@@ -176,50 +99,102 @@ function downloadPngImage(image: HTMLImageElement, filename: string) {
   link.remove()
 }
 
-export async function exportXhsImages() {
+function disableExportScrollContainers(page: HTMLElement) {
+  page.querySelectorAll<HTMLElement>('pre, pre code, figure.figure-table').forEach((element) => {
+    element.style.setProperty('overflow', 'hidden', 'important')
+    element.style.setProperty('overflow-x', 'hidden', 'important')
+    element.style.setProperty('overflow-y', 'hidden', 'important')
+    element.style.setProperty('scrollbar-width', 'none', 'important')
+  })
+}
+
+async function capturePage(
+  page: HTMLElement,
+  pageNumber: number,
+  snapdom: typeof import('@zumer/snapdom').snapdom,
+) {
+  const previousBoxShadow = page.style.boxShadow
+  page.style.boxShadow = 'none'
+
+  try {
+    const snapshot = await snapdom(page, {
+      cache: 'full',
+      dpr: 1,
+      embedFonts: true,
+      fast: true,
+      height: page.offsetHeight,
+      placeholders: false,
+      width: page.offsetWidth,
+    })
+
+    const image = await snapshot.toPng({
+      dpr: 1,
+      height: page.offsetHeight,
+      width: page.offsetWidth,
+    })
+    await image.decode()
+    downloadPngImage(image, `bm-md-xhs-${String(pageNumber).padStart(2, '0')}.png`)
+  }
+  finally {
+    if (previousBoxShadow) {
+      page.style.boxShadow = previousBoxShadow
+    }
+    else {
+      page.style.removeProperty('box-shadow')
+    }
+  }
+}
+
+async function exportXhsPages(pageIndex?: number) {
   const pages = Array.from(
     document.querySelectorAll<HTMLElement>('[data-xhs-export-page="true"]'),
   )
+  const indexedPage = pageIndex === undefined ? undefined : pages[pageIndex]
+  const selectedPages = pageIndex === undefined
+    ? pages.map((page, index) => ({ page, index }))
+    : indexedPage
+      ? [{ page: indexedPage, index: pageIndex }]
+      : []
 
-  if (pages.length === 0) {
+  if (selectedPages.length === 0) {
     toast.error('没有可导出的小红书图片')
     return
   }
 
   try {
-    const { snapdom } = await import('@zumer/snapdom')
+    const pageElements = selectedPages.map(({ page }) => page)
+    const { preCache, snapdom } = await import('@zumer/snapdom')
 
-    for (const [index, page] of pages.entries()) {
-      let clone: HTMLElement | null = null
-      try {
-        clone = await createExportClone(page)
-        const snapshot = await snapdom(clone, {
-          cache: 'disabled',
-          dpr: 1,
-          embedFonts: true,
-          fast: false,
-          height: clone.offsetHeight,
-          placeholders: false,
-          width: clone.offsetWidth,
-        })
+    await document.fonts.ready
+    await inlinePageImages(pageElements)
+    await Promise.all(pageElements.map(waitForPageImages))
+    pageElements.forEach(disableExportScrollContainers)
 
-        const image = await snapshot.toPng({
-          dpr: 1,
-          height: clone.offsetHeight,
-          width: clone.offsetWidth,
-        })
-        await image.decode()
-        downloadPngImage(image, `bm-md-xhs-${String(index + 1).padStart(2, '0')}.png`)
-      }
-      finally {
-        clone?.remove()
-      }
+    if (pageElements.length > 1) {
+      await preCache(pageElements[0]?.parentElement ?? document, {
+        cache: 'full',
+        embedFonts: true,
+      })
     }
 
-    toast.success(`已导出 ${pages.length} 张小红书图片`)
+    for (const { page, index } of selectedPages) {
+      await capturePage(page, index + 1, snapdom)
+    }
+
+    toast.success(pageIndex === undefined
+      ? `已导出 ${selectedPages.length} 张小红书图片`
+      : `已导出第 ${pageIndex + 1} 张小红书图片`)
   }
   catch (error) {
     toast.error('导出小红书图片失败')
     console.error(error)
   }
+}
+
+export async function exportXhsImage(pageIndex: number) {
+  await exportXhsPages(pageIndex)
+}
+
+export async function exportXhsImages() {
+  await exportXhsPages()
 }

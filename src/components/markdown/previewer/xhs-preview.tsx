@@ -1,10 +1,18 @@
+import { Slider as SliderPrimitive } from '@base-ui/react/slider'
 import { debounce } from 'es-toolkit'
-import { Download } from 'lucide-react'
+import { Download, RotateCcw, SlidersHorizontal } from 'lucide-react'
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { mermaidConfig } from '@/config/mermaid'
-import { exportXhsImages } from '@/lib/actions'
+import { exportXhsImage, exportXhsImages } from '@/lib/actions'
 import { getMarkdownLocaleTexts } from '@/lib/locale'
+import { formatXhsPageFooter } from '@/lib/xhs/footer'
+import { getXhsFontOption, getXhsTextFlowCss, XHS_FONT_OPTIONS } from '@/lib/xhs/typography'
 import { useEditorStore } from '@/stores/editor'
 import { useFilesStore } from '@/stores/files'
 import { PREVIEW_WIDTH_MOBILE, usePreviewStore } from '@/stores/preview'
@@ -13,34 +21,108 @@ const XHS_PAGE_WIDTH = 720
 const XHS_PAGE_HEIGHT = 960
 const XHS_PREVIEW_WIDTH = 540
 const XHS_PREVIEW_SCALE = XHS_PREVIEW_WIDTH / XHS_PAGE_WIDTH
-const XHS_SOURCE_WIDTH = PREVIEW_WIDTH_MOBILE
-const XHS_SOURCE_SCALE = XHS_PAGE_WIDTH / XHS_SOURCE_WIDTH
-const XHS_SOURCE_PAGE_HEIGHT = XHS_PAGE_HEIGHT / XHS_SOURCE_SCALE
-const XHS_SOURCE_FOOTER_SAFE_AREA = 34
+const XHS_LAYOUT_SCALE = XHS_PAGE_WIDTH / PREVIEW_WIDTH_MOBILE
+const XHS_SOURCE_WIDTH = XHS_PAGE_WIDTH
+const XHS_SOURCE_PAGE_HEIGHT = XHS_PAGE_HEIGHT
+const XHS_EXPORT_MEDIA_MAX_WIDTH = 600
+const XHS_EXPORT_MEDIA_MAX_HEIGHT = 360
+const XHS_SOURCE_MEDIA_MAX_WIDTH = XHS_EXPORT_MEDIA_MAX_WIDTH
+const XHS_SOURCE_MEDIA_MAX_HEIGHT = XHS_EXPORT_MEDIA_MAX_HEIGHT
+const XHS_SOURCE_FOOTER_SAFE_AREA = Math.round(34 * XHS_LAYOUT_SCALE)
 const XHS_USABLE_PAGE_HEIGHT = XHS_SOURCE_PAGE_HEIGHT - XHS_SOURCE_FOOTER_SAFE_AREA
-const XHS_MIN_TRAILING_SPACE = 70
-const XHS_SPARSE_PAGE_HEIGHT = 112
+const XHS_MIN_TRAILING_SPACE = Math.round(70 * XHS_LAYOUT_SCALE)
+const XHS_SPARSE_PAGE_HEIGHT = Math.round(112 * XHS_LAYOUT_SCALE)
 const XHS_PAGE_HEIGHT_TOLERANCE = 1
 const XHS_RENDER_DEBOUNCE_MS = 250
 
 const XHS_THEME_SURFACES: Record<string, string> = {
-  botanical: '#f7f5f0',
-  kiko: '#f5f4ef',
-  professional: '#fafaf8',
+  botanical: '#fffffe',
+  kiko: '#fffffe',
+  professional: '#fffffe',
 }
 
 function getXhsPageBackground(markdownStyle: string) {
   return XHS_THEME_SURFACES[markdownStyle] ?? XHS_THEME_SURFACES.professional
 }
 
-const XHS_ARTICLE_CSS = `
+function XhsSlider({
+  value,
+  onValueCommit,
+  min,
+  max,
+  step,
+  ariaLabel,
+}: {
+  value: number
+  onValueCommit: (value: number) => void
+  min: number
+  max: number
+  step: number
+  ariaLabel: string
+}) {
+  const [draftValue, setDraftValue] = useState(value)
+
+  const handleValueCommitted = useCallback((nextValue: number) => {
+    setDraftValue(nextValue)
+    onValueCommit(nextValue)
+  }, [onValueCommit])
+
+  return (
+    <SliderPrimitive.Root
+      value={draftValue}
+      onValueChange={setDraftValue}
+      onValueCommitted={handleValueCommitted}
+      min={min}
+      max={max}
+      step={step}
+      thumbAlignment="edge"
+      className="w-full"
+    >
+      <SliderPrimitive.Control className={`
+        relative flex w-full touch-none items-center select-none
+      `}
+      >
+        <SliderPrimitive.Track className={`
+          relative h-1 w-full overflow-hidden bg-muted select-none
+        `}
+        >
+          <SliderPrimitive.Indicator className="h-full bg-primary select-none" />
+        </SliderPrimitive.Track>
+        <SliderPrimitive.Thumb
+          getAriaLabel={() => ariaLabel}
+          className={`
+            relative block size-3 shrink-0 rounded-none border border-ring
+            bg-white ring-ring/50 select-none
+            after:absolute after:-inset-2
+            hover:ring-1
+            focus-visible:ring-1 focus-visible:outline-hidden
+            active:ring-1
+          `}
+        />
+      </SliderPrimitive.Control>
+    </SliderPrimitive.Root>
+  )
+}
+
+function getXhsArticleCss(fontSize: number, lineHeight: number, padding: number, fontFamily: string) {
+  const scaledFontSize = fontSize * XHS_LAYOUT_SCALE
+  const scaledPadding = padding * XHS_LAYOUT_SCALE
+  const topPadding = Math.round(scaledPadding * 1.28)
+  const bottomPadding = Math.round(scaledPadding * 1.71)
+  const fontList = getXhsFontOption(fontFamily).fontFamily
+  const isOppoSans = fontFamily === 'oppo-sans'
+  const bodyFontWeight = isOppoSans ? 300 : 400
+  const bodyLetterSpacing = isOppoSans ? '0.035em' : 'normal'
+  const paragraphSpacing = isOppoSans ? '1.35em' : '0.8em'
+
+  return `
 .xhs-article {
   width: ${XHS_SOURCE_WIDTH}px;
   min-height: ${XHS_SOURCE_PAGE_HEIGHT}px;
   box-sizing: border-box;
   background: transparent;
-  letter-spacing: 0.03em;
-  padding: 36px 28px 48px 28px;
+  letter-spacing: normal;
+  padding: ${topPadding}px ${scaledPadding}px ${bottomPadding}px ${scaledPadding}px;
 }
 
 .xhs-article.xhs-measure-probe {
@@ -68,18 +150,37 @@ const XHS_ARTICLE_CSS = `
   margin: 0 !important;
   padding: 0 !important;
   background: transparent !important;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif !important;
-  font-size: 12.5px !important;
-  line-height: 1.55 !important;
+  font-family: ${fontList} !important;
+  font-size: ${scaledFontSize}px !important;
+  font-weight: ${bodyFontWeight} !important;
+  line-height: ${lineHeight} !important;
+  letter-spacing: ${bodyLetterSpacing} !important;
+}
+
+.xhs-article #bm-md,
+.xhs-article #bm-md p,
+.xhs-article #bm-md li,
+.xhs-article #bm-md span,
+.xhs-article #bm-md strong,
+.xhs-article #bm-md a,
+.xhs-article #bm-md h1,
+.xhs-article #bm-md h2,
+.xhs-article #bm-md h3,
+.xhs-article #bm-md h4,
+.xhs-article #bm-md h5,
+.xhs-article #bm-md h6 {
+  font-family: ${fontList} !important;
 }
 
 /* 优化段落和行内元素 */
 .xhs-article #bm-md p {
-  font-size: 12.5px !important;
-  line-height: 1.55 !important;
+  font-size: ${scaledFontSize}px !important;
+  font-weight: ${bodyFontWeight} !important;
+  line-height: ${lineHeight} !important;
+  letter-spacing: ${bodyLetterSpacing} !important;
   margin-top: 0 !important;
-  margin-bottom: 0.8em !important;
-  text-align: justify !important;
+  margin-bottom: ${paragraphSpacing} !important;
+${getXhsTextFlowCss()}
 }
 
 .xhs-article #bm-md strong {
@@ -95,8 +196,8 @@ const XHS_ARTICLE_CSS = `
 }
 
 .xhs-article #bm-md li {
-  font-size: 12px !important;
-  line-height: 1.5 !important;
+  font-size: ${Math.max(scaledFontSize - 0.5 * XHS_LAYOUT_SCALE, 9 * XHS_LAYOUT_SCALE)}px !important;
+  line-height: ${lineHeight - 0.05} !important;
   margin-top: 0.4em !important;
   margin-bottom: 0.4em !important;
 }
@@ -110,39 +211,41 @@ const XHS_ARTICLE_CSS = `
 .xhs-article #bm-md h6 {
   font-weight: 700 !important;
   line-height: 1.3 !important;
+  letter-spacing: ${isOppoSans ? '-0.025em' : 'normal'} !important;
   margin-top: 1.2em !important;
   margin-bottom: 0.6em !important;
+  font-family: ${fontList} !important;
 }
 
 .xhs-article #bm-md h1 {
-  font-size: 24px !important;
+  font-size: ${Math.round(scaledFontSize * 1.92)}px !important;
 }
 
 .xhs-article #bm-md h2 {
-  font-size: 20px !important;
+  font-size: ${Math.round(scaledFontSize * 1.6)}px !important;
   border-bottom: none !important;
   padding-bottom: 0 !important;
 }
 
 .xhs-article #bm-md h3 {
-  font-size: 18px !important;
+  font-size: ${Math.round(scaledFontSize * 1.44)}px !important;
 }
 
 .xhs-article #bm-md h4 {
-  font-size: 16px !important;
+  font-size: ${Math.round(scaledFontSize * 1.28)}px !important;
 }
 
 /* 优化引用块 */
 .xhs-article #bm-md blockquote {
   margin: 0.8em 0 !important;
-  padding: 8px 14px !important;
-  border-left: 4px solid currentColor !important;
+  padding: ${8 * XHS_LAYOUT_SCALE}px ${14 * XHS_LAYOUT_SCALE}px !important;
+  border-left: ${4 * XHS_LAYOUT_SCALE}px solid currentColor !important;
   background: rgba(0, 0, 0, 0.02) !important;
-  border-radius: 0 6px 6px 0 !important;
+  border-radius: 0 ${6 * XHS_LAYOUT_SCALE}px ${6 * XHS_LAYOUT_SCALE}px 0 !important;
 }
 
 .xhs-article #bm-md blockquote p {
-  font-size: 14px !important;
+  font-size: ${scaledFontSize + 1.5 * XHS_LAYOUT_SCALE}px !important;
   font-style: italic !important;
   margin: 0 !important;
   opacity: 0.85 !important;
@@ -153,23 +256,25 @@ const XHS_ARTICLE_CSS = `
   min-height: ${XHS_USABLE_PAGE_HEIGHT}px;
   flex-direction: column;
   justify-content: center;
-  gap: 18px;
-  padding: 48px 34px;
+  gap: ${18 * XHS_LAYOUT_SCALE}px;
+  padding: ${topPadding + 12 * XHS_LAYOUT_SCALE}px ${scaledPadding + 6 * XHS_LAYOUT_SCALE}px;
 }
 
 .xhs-cover-title {
   max-width: 100%;
   margin: 0 !important;
-  font-size: 34px !important;
+  font-size: ${Math.round(scaledFontSize * 2.72)}px !important;
   font-weight: 700 !important;
   line-height: 1.16 !important;
+  font-family: ${fontList} !important;
 }
 
 .xhs-cover-subtitle {
   max-width: 100%;
   margin: 0 !important;
-  font-size: 15px !important;
+  font-size: ${scaledFontSize + 2.5 * XHS_LAYOUT_SCALE}px !important;
   line-height: 1.55 !important;
+  font-family: ${fontList} !important;
 }
 
 .xhs-page[data-markdown-style="professional"] .xhs-cover-title,
@@ -201,10 +306,10 @@ const XHS_ARTICLE_CSS = `
 
 .xhs-page-number {
   position: absolute;
-  right: 44px;
-  bottom: 34px;
+  right: ${44 * XHS_LAYOUT_SCALE}px;
+  bottom: ${34 * XHS_LAYOUT_SCALE}px;
   font-family: "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
-  font-size: 16px;
+  font-size: ${16 * XHS_LAYOUT_SCALE}px;
   line-height: 1;
   letter-spacing: 0;
 }
@@ -238,14 +343,37 @@ const XHS_ARTICLE_CSS = `
 .xhs-article svg {
   display: block !important;
   max-width: 100% !important;
-  max-height: 430px !important;
+  max-height: ${XHS_SOURCE_MEDIA_MAX_HEIGHT}px !important;
   height: auto !important;
   object-fit: contain !important;
 }
 
 .xhs-article figure {
   width: 100% !important;
+  max-width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  overflow: visible !important;
   break-inside: avoid !important;
+}
+
+.xhs-article figure.figure-image,
+.xhs-article figure.figure-image > a,
+.xhs-article figure.figure-image > picture {
+  display: block !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  text-align: center !important;
+}
+
+.xhs-article figure.figure-image img {
+  display: block !important;
+  width: ${XHS_SOURCE_MEDIA_MAX_WIDTH}px !important;
+  max-width: 100% !important;
+  height: ${XHS_SOURCE_MEDIA_MAX_HEIGHT}px !important;
+  max-height: ${XHS_SOURCE_MEDIA_MAX_HEIGHT}px !important;
+  object-fit: contain !important;
+  margin: 0 auto !important;
 }
 
 .xhs-article figcaption {
@@ -253,10 +381,33 @@ const XHS_ARTICLE_CSS = `
 }
 
 .xhs-article pre {
-  overflow: visible !important;
-  overflow-x: visible !important;
-  overflow-y: visible !important;
+  margin: 0.6em 0 !important;
+  padding: 1.6em 0.8em 0.8em 0.8em !important;
+  font-size: ${Math.max(scaledFontSize - 2 * XHS_LAYOUT_SCALE, 9.5 * XHS_LAYOUT_SCALE)}px !important;
+  line-height: 1.4 !important;
+  overflow: hidden !important;
+  overflow-x: hidden !important;
+  overflow-y: hidden !important;
   white-space: pre-wrap !important;
+  scrollbar-width: none !important;
+}
+
+.xhs-article #bm-md pre::-webkit-scrollbar,
+.xhs-article #bm-md pre::-webkit-scrollbar-button,
+.xhs-article #bm-md pre::-webkit-scrollbar-track,
+.xhs-article #bm-md pre::-webkit-scrollbar-thumb,
+.xhs-article #bm-md figure.figure-table::-webkit-scrollbar,
+.xhs-article #bm-md figure.figure-table::-webkit-scrollbar-button,
+.xhs-article #bm-md figure.figure-table::-webkit-scrollbar-track,
+.xhs-article #bm-md figure.figure-table::-webkit-scrollbar-thumb {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.xhs-article pre::after {
+  display: none !important;
+  content: none !important;
 }
 
 .xhs-article pre > span:empty {
@@ -268,14 +419,19 @@ const XHS_ARTICLE_CSS = `
   min-width: 0 !important;
   width: 100% !important;
   max-width: 100% !important;
+  font-size: ${Math.max(scaledFontSize - 2 * XHS_LAYOUT_SCALE, 9.5 * XHS_LAYOUT_SCALE)}px !important;
+  line-height: 1.4 !important;
   white-space: pre-wrap !important;
   overflow-wrap: anywhere !important;
   word-break: break-word !important;
+  overflow: hidden !important;
 }
 
 .xhs-article pre code * {
   min-width: 0 !important;
   max-width: 100% !important;
+  font-size: ${Math.max(scaledFontSize - 2 * XHS_LAYOUT_SCALE, 9.5 * XHS_LAYOUT_SCALE)}px !important;
+  line-height: 1.4 !important;
   white-space: pre-wrap !important;
   overflow-wrap: anywhere !important;
   word-break: break-word !important;
@@ -283,14 +439,36 @@ const XHS_ARTICLE_CSS = `
 
 .xhs-article table {
   width: 100% !important;
+  max-width: 100% !important;
+  table-layout: fixed !important;
+  font-size: ${Math.max(scaledFontSize - 2.5 * XHS_LAYOUT_SCALE, 9 * XHS_LAYOUT_SCALE)}px !important;
+  line-height: 1.35 !important;
+  margin: 0.6em 0 !important;
+  border-collapse: collapse !important;
   break-inside: avoid !important;
+}
+
+.xhs-article figure.figure-table {
+  overflow: hidden !important;
+  overflow-x: hidden !important;
+  overflow-y: hidden !important;
+  scrollbar-width: none !important;
 }
 
 .xhs-article th,
 .xhs-article td {
+  min-width: 0 !important;
+  max-width: none !important;
+  padding: ${5 * XHS_LAYOUT_SCALE}px ${6 * XHS_LAYOUT_SCALE}px !important;
+  font-size: ${Math.max(scaledFontSize - 2.5 * XHS_LAYOUT_SCALE, 9 * XHS_LAYOUT_SCALE)}px !important;
+  line-height: 1.35 !important;
   vertical-align: top !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
 }
 `
+}
 
 interface XhsRenderedPage {
   id: string
@@ -334,20 +512,32 @@ async function renderMermaidNodes(container: HTMLElement) {
   }))
 }
 
+function cleanInlineStyles(html: string) {
+  return html
+    .replace(/font-family\s*:[^;"]+;?/gi, '')
+    .replace(/font-size\s*:[^;"]+;?/gi, '')
+    .replace(/line-height\s*:[^;"]+;?/gi, '')
+}
+
 function XhsPage({
   html,
   markdownStyle,
+  authorName,
+  footerLabel,
   pageNumber,
-  pageCount,
   exportPage = false,
 }: {
   html: string
   markdownStyle: string
+  authorName: string
+  footerLabel: string
   pageNumber?: number
-  pageCount?: number
   exportPage?: boolean
 }) {
   const pageBackground = getXhsPageBackground(markdownStyle)
+  const cleanedHtml = useMemo(() => cleanInlineStyles(html), [html])
+  const normalizedAuthor = authorName.trim()
+  const normalizedFooter = footerLabel.trim()
 
   return (
     <div
@@ -361,35 +551,30 @@ function XhsPage({
       }}
     >
       <div
-        className="absolute top-0 left-0"
-        style={{
-          width: XHS_SOURCE_WIDTH,
-          height: XHS_SOURCE_PAGE_HEIGHT,
-          transform: `scale(${XHS_SOURCE_SCALE})`,
-          transformOrigin: 'top left',
-        }}
+        className={pageNumber ? 'xhs-article xhs-page-article' : 'xhs-article'}
       >
-        <div
-          className={pageNumber ? 'xhs-article xhs-page-article' : 'xhs-article'}
-        >
-          {pageNumber
-            ? (
-                <div
-                  id="bm-md"
-                  style={{ background: 'transparent', padding: 0, margin: 0, width: '100%', minHeight: 'auto' }}
-                  dangerouslySetInnerHTML={{ __html: html }}
-                />
-              )
-            : (
-                <div dangerouslySetInnerHTML={{ __html: html }} />
-              )}
-        </div>
+        {pageNumber
+          ? (
+              <div
+                id="bm-md"
+                style={{ background: 'transparent', padding: 0, margin: 0, width: '100%', minHeight: 'auto' }}
+                dangerouslySetInnerHTML={{ __html: cleanedHtml }}
+              />
+            )
+          : (
+              <div dangerouslySetInnerHTML={{ __html: cleanedHtml }} />
+            )}
       </div>
-      {pageNumber && pageCount && (
-        <div className="xhs-page-number">
-          {String(pageNumber).padStart(2, '0')}
-          {' / '}
-          {String(pageCount).padStart(2, '0')}
+      {(normalizedAuthor || normalizedFooter) && (
+        <div
+          className={`
+            pointer-events-none absolute right-10 bottom-7 left-10 flex
+            items-end justify-between gap-6 text-[18px] leading-none
+            tracking-wide text-black/45
+          `}
+        >
+          <span className="min-w-0 truncate text-left">{normalizedAuthor}</span>
+          <span className="min-w-0 truncate text-right">{normalizedFooter}</span>
         </div>
       )}
     </div>
@@ -661,6 +846,44 @@ function compactPages(pages: XhsRenderedPage[], probe: HTMLElement) {
   }
 }
 
+function createCodeBlockHtml(pre: HTMLElement, lines: string[]) {
+  const clone = pre.cloneNode(false) as HTMLElement
+  const sourceCode = pre.querySelector('code')
+  const code = sourceCode?.cloneNode(false) as HTMLElement | undefined
+
+  if (code) {
+    code.textContent = lines.join('\n')
+    clone.appendChild(code)
+  }
+  else {
+    clone.textContent = lines.join('\n')
+  }
+
+  return clone.outerHTML
+}
+
+function splitCodeBlockIntoPages(pre: HTMLElement, probe: HTMLElement) {
+  const text = pre.querySelector('code')?.textContent ?? pre.textContent ?? ''
+  const lines = text.replace(/\n$/, '').split('\n')
+  const pages: string[] = []
+  let currentLines: string[] = []
+
+  for (const line of lines) {
+    const candidateLines = [...currentLines, line]
+    if (currentLines.length > 0 && !fitsPage(probe, createCodeBlockHtml(pre, candidateLines))) {
+      pages.push(createCodeBlockHtml(pre, currentLines))
+      currentLines = []
+    }
+    currentLines.push(line)
+  }
+
+  if (currentLines.length > 0) {
+    pages.push(createCodeBlockHtml(pre, currentLines))
+  }
+
+  return pages
+}
+
 function hasRenderableContent(html: string) {
   const container = document.createElement('div')
   container.innerHTML = html
@@ -825,6 +1048,7 @@ function buildSemanticPages(
     const table = element.matches('table')
       ? element as HTMLTableElement
       : element.querySelector<HTMLTableElement>(':scope > table')
+    const codeBlock = element.matches('pre') ? element : null
 
     const takeTrailingHeading = () => {
       const trailingHtml = currentHtml.at(-1)
@@ -847,6 +1071,17 @@ function buildSemanticPages(
       tablePages.forEach((html, index) => {
         pages.push({
           id: `table-${pages.length}-${index}`,
+          html,
+        })
+      })
+      return
+    }
+
+    if (codeBlock && !fitsPage(probe, codeBlock.outerHTML)) {
+      takeTrailingHeading()
+      splitCodeBlockIntoPages(codeBlock, probe).forEach((html, index) => {
+        pages.push({
+          id: `code-${pages.length}-${index}`,
           html,
         })
       })
@@ -997,6 +1232,18 @@ export function XhsPreview() {
   const setRenderedHtml = usePreviewStore(state => state.setRenderedHtml)
   const xhsPaginationMode = usePreviewStore(state => state.xhsPaginationMode)
   const setXhsPaginationMode = usePreviewStore(state => state.setXhsPaginationMode)
+  const xhsFontSize = usePreviewStore(state => state.xhsFontSize)
+  const setXhsFontSize = usePreviewStore(state => state.setXhsFontSize)
+  const xhsLineHeight = usePreviewStore(state => state.xhsLineHeight)
+  const setXhsLineHeight = usePreviewStore(state => state.setXhsLineHeight)
+  const xhsPadding = usePreviewStore(state => state.xhsPadding)
+  const setXhsPadding = usePreviewStore(state => state.setXhsPadding)
+  const xhsFontFamily = usePreviewStore(state => state.xhsFontFamily)
+  const setXhsFontFamily = usePreviewStore(state => state.setXhsFontFamily)
+  const xhsAuthorName = usePreviewStore(state => state.xhsAuthorName)
+  const setXhsAuthorName = usePreviewStore(state => state.setXhsAuthorName)
+  const xhsShowFooter = usePreviewStore(state => state.xhsShowFooter)
+  const setXhsShowFooter = usePreviewStore(state => state.setXhsShowFooter)
 
   const measureRef = useRef<HTMLDivElement>(null)
   const exportPagesRef = useRef<HTMLDivElement>(null)
@@ -1005,6 +1252,9 @@ export function XhsPreview() {
   const [renderedPages, setRenderedPages] = useState<XhsRenderedPage[]>([])
   const [isRendering, setIsRendering] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
+  const [exportingPageIndex, setExportingPageIndex] = useState<number | null>(null)
+  const [preparedHtml, setPreparedHtml] = useState('')
+  const [isPreparing, setIsPreparing] = useState(false)
 
   const scheduleRender = useMemo(
     () => debounce(async (
@@ -1058,19 +1308,103 @@ export function XhsPreview() {
     }
   }, [deferredContent, markdownStyle, codeTheme, customCss, enableFootnoteLinks, openLinksInNewWindow, scheduleRender])
 
+  useEffect(() => {
+    let active = true
+    if (!renderedHtml) {
+      setPreparedHtml('')
+      return
+    }
+
+    const prepare = async () => {
+      setIsPreparing(true)
+      try {
+        const temp = document.createElement('div')
+        temp.innerHTML = cleanInlineStyles(renderedHtml)
+
+        await renderMermaidNodes(temp)
+        await inlineRemoteImages(temp)
+        await waitForImages(temp)
+
+        if (active) {
+          setPreparedHtml(temp.innerHTML)
+        }
+      }
+      catch (err) {
+        console.error('XHS HTML prepare error:', err)
+        if (active) {
+          setPreparedHtml(cleanInlineStyles(renderedHtml))
+        }
+      }
+      finally {
+        if (active) {
+          setIsPreparing(false)
+        }
+      }
+    }
+
+    void prepare()
+    return () => {
+      active = false
+    }
+  }, [renderedHtml])
+
   const calculatePages = useCallback(async () => {
     const measure = measureRef.current
-    if (!measure || !renderedHtml) {
+    if (!measure || !preparedHtml) {
       setRenderedPages([])
       return
     }
 
-    await renderMermaidNodes(measure)
-    await inlineRemoteImages(measure)
-    await waitForImages(measure)
     await document.fonts.ready
     setRenderedPages(buildSemanticPages(measure, xhsPaginationMode))
-  }, [renderedHtml, xhsPaginationMode])
+  }, [preparedHtml, xhsPaginationMode])
+
+  useEffect(() => {
+    const fontCssHref = getXhsFontOption(xhsFontFamily).fontCssHref
+
+    if (!fontCssHref) {
+      return
+    }
+
+    let cancelled = false
+    const selector = `link[data-xhs-font-stylesheet][href="${fontCssHref}"]`
+    const existingStylesheet = document.head.querySelector<HTMLLinkElement>(selector)
+
+    const recalculateAfterFontsReady = async () => {
+      await document.fonts.ready
+
+      if (!cancelled) {
+        void calculatePages()
+      }
+    }
+
+    if (existingStylesheet) {
+      void recalculateAfterFontsReady()
+      return () => {
+        cancelled = true
+      }
+    }
+
+    const stylesheet = document.createElement('link')
+    stylesheet.rel = 'stylesheet'
+    stylesheet.href = fontCssHref
+    stylesheet.dataset.xhsFontStylesheet = 'true'
+    const handleStylesheetLoad = () => {
+      void recalculateAfterFontsReady()
+    }
+    const handleStylesheetError = () => {
+      console.warn('XHS font stylesheet failed to load:', fontCssHref)
+    }
+    stylesheet.addEventListener('load', handleStylesheetLoad, { once: true })
+    stylesheet.addEventListener('error', handleStylesheetError, { once: true })
+    document.head.appendChild(stylesheet)
+
+    return () => {
+      cancelled = true
+      stylesheet.removeEventListener('load', handleStylesheetLoad)
+      stylesheet.removeEventListener('error', handleStylesheetError)
+    }
+  }, [calculatePages, xhsFontFamily])
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -1078,11 +1412,11 @@ export function XhsPreview() {
     })
 
     return () => window.cancelAnimationFrame(frame)
-  }, [calculatePages])
+  }, [calculatePages, xhsFontSize, xhsLineHeight, xhsPadding, xhsFontFamily])
 
   useEffect(() => {
     overflowFixCountRef.current = 0
-  }, [renderedHtml, xhsPaginationMode])
+  }, [preparedHtml, xhsPaginationMode, xhsFontSize, xhsLineHeight, xhsPadding, xhsFontFamily])
 
   useEffect(() => {
     if (renderedPages.length === 0) {
@@ -1121,12 +1455,12 @@ export function XhsPreview() {
   }, [renderedPages])
 
   const pageCountText = useMemo(() => {
-    if (isRendering) {
+    if (isRendering || isPreparing) {
       return '渲染中'
     }
 
     return `共 ${renderedPages.length} 张`
-  }, [isRendering, renderedPages.length])
+  }, [isRendering, isPreparing, renderedPages.length])
 
   const handleExport = async () => {
     setIsExporting(true)
@@ -1138,12 +1472,22 @@ export function XhsPreview() {
     }
   }
 
+  const handleExportPage = async (pageIndex: number) => {
+    setExportingPageIndex(pageIndex)
+    try {
+      await exportXhsImage(pageIndex)
+    }
+    finally {
+      setExportingPageIndex(null)
+    }
+  }
+
   const hasContent = renderedHtml.trim().length > 0
 
   return (
     <div className="flex size-full flex-col overflow-hidden">
       <style>
-        {XHS_ARTICLE_CSS}
+        {getXhsArticleCss(xhsFontSize, xhsLineHeight, xhsPadding, xhsFontFamily)}
       </style>
       <div className={`
         flex shrink-0 items-center justify-between gap-3 border-b bg-background
@@ -1151,6 +1495,159 @@ export function XhsPreview() {
       `}
       >
         <div className="flex min-w-0 items-center gap-3">
+          <Popover>
+            <PopoverTrigger
+              render={(
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 rounded-md px-2.5"
+                  aria-label="排版自定义设置"
+                  title="排版自定义设置"
+                >
+                  <SlidersHorizontal className="size-4" />
+                </Button>
+              )}
+            />
+            <PopoverContent className="w-72 rounded-md p-4 select-none" align="start">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between border-b pb-2">
+                  <h4 className="text-sm font-medium">排版选项</h4>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className={`
+                      size-6 text-muted-foreground
+                      hover:text-foreground
+                    `}
+                    aria-label="重置为默认值"
+                    title="重置为默认值"
+                    onClick={() => {
+                      setXhsFontSize(12.5)
+                      setXhsLineHeight(1.55)
+                      setXhsPadding(28)
+                      setXhsFontFamily('sans-serif')
+                      setXhsAuthorName('')
+                      setXhsShowFooter(true)
+                    }}
+                  >
+                    <RotateCcw className="size-3.5" />
+                  </Button>
+                </div>
+
+                {/* 字体家族选择 */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">字体样式</Label>
+                  <Select value={xhsFontFamily} onValueChange={setXhsFontFamily}>
+                    <SelectTrigger className={`
+                      h-8 w-full rounded-md border bg-transparent text-xs
+                    `}
+                    >
+                      <SelectValue>{getXhsFontOption(xhsFontFamily).label}</SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {XHS_FONT_OPTIONS.map(option => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">左下角作者</Label>
+                    <Input
+                      value={xhsAuthorName}
+                      onChange={event => setXhsAuthorName(event.target.value)}
+                      maxLength={24}
+                      placeholder="@作者"
+                      aria-label="小红书左下角作者"
+                    />
+                  </div>
+                  <div className={`
+                    flex items-center justify-between rounded-md border px-3
+                    py-2
+                  `}
+                  >
+                    <Label
+                      className="text-xs text-muted-foreground"
+                      htmlFor="xhs-show-footer"
+                    >
+                      显示右下角页码
+                    </Label>
+                    <Checkbox
+                      id="xhs-show-footer"
+                      checked={xhsShowFooter}
+                      onCheckedChange={setXhsShowFooter}
+                      aria-label="显示小红书右下角页码"
+                    />
+                  </div>
+                </div>
+
+                {/* 字体大小滑块 */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <Label className="text-muted-foreground">字体大小</Label>
+                    <span className="font-mono text-muted-foreground">
+                      {xhsFontSize}
+                      px
+                    </span>
+                  </div>
+                  <XhsSlider
+                    key={xhsFontSize}
+                    value={xhsFontSize}
+                    onValueCommit={setXhsFontSize}
+                    min={10}
+                    max={18}
+                    step={0.5}
+                    ariaLabel="小红书字体大小"
+                  />
+                </div>
+
+                {/* 行间距滑块 */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <Label className="text-muted-foreground">行间距</Label>
+                    <span className="font-mono text-muted-foreground">{xhsLineHeight}</span>
+                  </div>
+                  <XhsSlider
+                    key={xhsLineHeight}
+                    value={xhsLineHeight}
+                    onValueCommit={setXhsLineHeight}
+                    min={1.2}
+                    max={2.2}
+                    step={0.05}
+                    ariaLabel="小红书行间距"
+                  />
+                </div>
+
+                {/* 页边距滑块 */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <Label className="text-muted-foreground">页边距</Label>
+                    <span className="font-mono text-muted-foreground">
+                      {xhsPadding}
+                      px
+                    </span>
+                  </div>
+                  <XhsSlider
+                    key={xhsPadding}
+                    value={xhsPadding}
+                    onValueCommit={setXhsPadding}
+                    min={16}
+                    max={48}
+                    step={2}
+                    ariaLabel="小红书页边距"
+                  />
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+
           <div className="flex overflow-hidden rounded-md border">
             <Button
               type="button"
@@ -1177,11 +1674,11 @@ export function XhsPreview() {
         </div>
         <Button
           size="sm"
-          disabled={!hasContent || renderedPages.length === 0 || isRendering || isExporting}
+          disabled={!hasContent || renderedPages.length === 0 || isRendering || isExporting || exportingPageIndex !== null}
           onClick={handleExport}
         >
           <Download className="size-4" />
-          {isExporting ? '导出中' : '导出小红书图片'}
+          {isExporting ? '导出中' : '导出所有图片'}
         </Button>
       </div>
 
@@ -1191,7 +1688,7 @@ export function XhsPreview() {
           className={`
             xhs-article pointer-events-none fixed top-0 left-[-9999px]
           `}
-          dangerouslySetInnerHTML={{ __html: renderedHtml }}
+          dangerouslySetInnerHTML={{ __html: preparedHtml }}
         />
 
         <div
@@ -1205,8 +1702,11 @@ export function XhsPreview() {
               key={`export-${page.id}`}
               html={page.html}
               markdownStyle={markdownStyle}
+              authorName={xhsAuthorName}
+              footerLabel={xhsShowFooter
+                ? formatXhsPageFooter(index + 1, renderedPages.length)
+                : ''}
               pageNumber={page.id === 'cover' ? undefined : index + 1}
-              pageCount={page.id === 'cover' ? undefined : renderedPages.length}
               exportPage
             />
           ))}
@@ -1227,7 +1727,7 @@ export function XhsPreview() {
             {renderedPages.map((page, index) => (
               <div
                 key={`preview-${page.id}`}
-                className="flex w-fit flex-col items-center gap-3"
+                className="group relative flex w-fit flex-col items-center gap-3"
               >
                 <div className="text-center text-xs text-muted-foreground">
                   {index + 1}
@@ -1235,6 +1735,23 @@ export function XhsPreview() {
                   /
                   {renderedPages.length}
                 </div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="icon"
+                  className={`
+                    absolute top-7 -right-11 z-10 size-8 rounded-md opacity-0
+                    shadow-sm
+                    group-hover:opacity-100 group-focus-within:opacity-100
+                    focus-visible:opacity-100
+                  `}
+                  disabled={isExporting || exportingPageIndex !== null}
+                  onClick={() => void handleExportPage(index)}
+                  aria-label={`下载第 ${index + 1} 张图片`}
+                  title={`下载第 ${index + 1} 张图片`}
+                >
+                  <Download className="size-4" />
+                </Button>
                 <div
                   className="origin-top overflow-hidden rounded-md border"
                   style={{
@@ -1254,8 +1771,11 @@ export function XhsPreview() {
                     <XhsPage
                       html={page.html}
                       markdownStyle={markdownStyle}
+                      authorName={xhsAuthorName}
+                      footerLabel={xhsShowFooter
+                        ? formatXhsPageFooter(index + 1, renderedPages.length)
+                        : ''}
                       pageNumber={page.id === 'cover' ? undefined : index + 1}
-                      pageCount={page.id === 'cover' ? undefined : renderedPages.length}
                     />
                   </div>
                 </div>

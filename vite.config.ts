@@ -109,6 +109,7 @@ const config = defineConfig({
       },
       injectManifest: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
+        globIgnores: ['fonts/**'],
       },
       devOptions: {
         enabled: false,

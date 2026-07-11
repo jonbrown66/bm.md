@@ -36,6 +36,24 @@
   border-bottom: none;
 }
 
+#bm-md h2::before {
+  content: '#';
+  display: inline-block;
+  color: #1d4ed8;
+  opacity: 0.65;
+  margin-right: 0.22em;
+  transform: translateY(-0.03em);
+}
+
+#bm-md h3 {
+  border-left: 3px solid rgba(29, 78, 216, 0.85);
+  padding-left: 8px;
+}
+
+#bm-md h3::before {
+  content: none;
+}
+
 /* 代码块 - 轻量 mac 卡片风格，无复制按钮 */
 #bm-md pre {
   position: relative;

@@ -1,0 +1,12 @@
+/*
+ * OPPO Sans 4.0
+ * Source: https://www.coloros.com/article/A00000074/
+ * License notice: ./LICENSE.txt
+ */
+@font-face {
+  font-family: 'OPPO Sans';
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url('/fonts/oppo-sans/OPPO-Sans-4.0.woff2') format('woff2');
+}

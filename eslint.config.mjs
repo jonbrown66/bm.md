@@ -10,6 +10,7 @@ export default antfu({
   },
   ignores: [
     '**/*.gen.ts',
+    'public/fonts/**',
     'src/components/ui/**',
     'src/hooks/use-mobile.tsx',
   ],
