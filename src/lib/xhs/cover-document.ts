@@ -59,7 +59,7 @@ function extractCoverText(markdown: string) {
   const lines = markdown.split(/\r?\n/)
   const h1 = lines.find(line => /^#\s+/.test(line))
   const h2 = lines.find(line => /^##\s+/.test(line))
-  const title = cleanMarkdownText((h1 ?? h2 ?? '').replace(/^#{1,2}\s+/, '')) || '未命名文章'
+  const title = cleanMarkdownText((h1 ?? h2 ?? '').replace(/^#{1,2}\s+/, '')) || '项目名'
   const subtitle = lines
     .map(line => line.trim())
     .filter(line => line && !/^#{1,6}\s+/.test(line) && !/^[-*+]\s+/.test(line))
@@ -69,20 +69,41 @@ function extractCoverText(markdown: string) {
   return { title, subtitle }
 }
 
+export function applyProjectNameToCoverDocument(
+  document: XhsCoverDocument,
+  markdown: string,
+): XhsCoverDocument {
+  const { title } = extractCoverText(markdown)
+  const titleElement = document.elements.find(element => element.type === 'text' && element.id.startsWith('title-'))
+    ?? document.elements.find(element => element.type === 'text')
+
+  if (!titleElement) {
+    return document
+  }
+
+  return updateCoverElement(document, titleElement.id, { text: title })
+}
+
 export function createDefaultCoverDocument(markdown: string): XhsCoverDocument {
-  const { title, subtitle } = extractCoverText(markdown)
+  void markdown
+  const title = '项目名'
+  const logo = `data:image/svg+xml,${encodeURIComponent(`
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180">
+      <path fill="#050505" d="M0 0h96v48H48v48H0V0Zm0 48h48v132H0V48Zm96 48h48v84H96V96Z"/>
+    </svg>
+  `)}`
   const elements: XhsCoverElement[] = [
     {
       id: createElementId('title'),
       type: 'text',
-      x: 70,
-      y: 300,
-      width: 580,
-      height: 150,
+      x: 170,
+      y: 185,
+      width: 380,
+      height: 130,
       zIndex: 1,
       text: title,
       fontFamily: 'OPPO Sans',
-      fontSize: 72,
+      fontSize: 120,
       fontWeight: 700,
       color: '#111111',
       textAlign: 'center',
@@ -93,31 +114,40 @@ export function createDefaultCoverDocument(markdown: string): XhsCoverDocument {
       borderWidth: 0,
       borderRadius: 0,
     },
-  ]
-
-  if (subtitle) {
-    elements.push({
-      id: createElementId('subtitle'),
-      type: 'text',
-      x: 110,
-      y: 490,
-      width: 500,
-      height: 100,
+    {
+      id: createElementId('logo'),
+      type: 'image',
+      x: 270,
+      y: 385,
+      width: 180,
+      height: 180,
       zIndex: 2,
-      text: subtitle,
+      src: logo,
+      aspectRatio: 1,
+      alt: '品牌标志',
+    },
+    {
+      id: createElementId('tagline'),
+      type: 'text',
+      x: 150,
+      y: 680,
+      width: 420,
+      height: 76,
+      zIndex: 3,
+      text: '每天拆解一个AI项目  ⇢',
       fontFamily: 'OPPO Sans',
-      fontSize: 30,
-      fontWeight: 300,
-      color: '#555555',
+      fontSize: 35,
+      fontWeight: 400,
+      color: '#ffffff',
       textAlign: 'center',
       verticalAlign: 'middle',
-      lineHeight: 1.5,
-      backgroundColor: 'transparent',
-      borderColor: '#555555',
+      lineHeight: 1.2,
+      backgroundColor: '#2854e8',
+      borderColor: '#2854e8',
       borderWidth: 0,
-      borderRadius: 0,
-    })
-  }
+      borderRadius: 38,
+    },
+  ]
 
   return { version: 1, width: XHS_COVER_WIDTH, height: XHS_COVER_HEIGHT, elements }
 }

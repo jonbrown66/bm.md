@@ -75,11 +75,11 @@ describe('getMediaFitScale', () => {
 
   it('uses substantial remaining space instead of moving the whole image', () => {
     expect(getMediaFitScale({
-      availableHeight: 300,
+      availableHeight: 340,
       blockHeight: 400,
       mediaHeight: 360,
       tolerance: 0,
-      minScale: 0.7,
-    })).toBeCloseTo(13 / 18)
+      minScale: 0.8,
+    })).toBeCloseTo(5 / 6)
   })
 })

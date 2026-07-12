@@ -1,18 +1,33 @@
 import { describe, expect, it } from 'vitest'
-import { clampCoverElement, createDefaultCoverDocument, parseCoverDocument } from './cover-document'
+import { applyProjectNameToCoverDocument, clampCoverElement, createDefaultCoverDocument, parseCoverDocument } from './cover-document'
 
 describe('xhs cover document', () => {
-  it('creates editable title and subtitle layers from markdown', () => {
+  it('creates the fixed branded cover without reading the article title', () => {
     const result = createDefaultCoverDocument('# Memdex\n\n每天拆解一个 AI 产品')
 
-    expect(result.elements.map(element => element.type)).toEqual(['text', 'text'])
-    expect(result.elements[0]).toMatchObject({ type: 'text', text: 'Memdex' })
-    expect(result.elements[1]).toMatchObject({ type: 'text', text: '每天拆解一个 AI 产品' })
+    expect(result.elements.map(element => element.type)).toEqual(['text', 'image', 'text'])
+    expect(result.elements[0]).toMatchObject({ type: 'text', text: '项目名', fontSize: 120 })
+    expect(result.elements[1]).toMatchObject({ type: 'image', alt: '品牌标志' })
+    expect(result.elements[2]).toMatchObject({
+      type: 'text',
+      text: '每天拆解一个AI项目  ⇢',
+      fontSize: 35,
+      backgroundColor: '#2854e8',
+      borderRadius: 38,
+    })
   })
 
-  it('falls back to an h2 and a safe untitled label', () => {
-    expect(createDefaultCoverDocument('## 次级标题').elements[0]).toMatchObject({ text: '次级标题' })
-    expect(createDefaultCoverDocument('普通正文').elements[0]).toMatchObject({ text: '未命名文章' })
+  it('keeps the project name placeholder for any markdown content', () => {
+    expect(createDefaultCoverDocument('## 次级标题').elements[0]).toMatchObject({ text: '项目名' })
+    expect(createDefaultCoverDocument('普通正文').elements[0]).toMatchObject({ text: '项目名' })
+  })
+
+  it('only replaces the project name when reusing a cover template', () => {
+    const template = createDefaultCoverDocument('# Memdex\n\n每天拆解一个 AI 产品')
+    const result = applyProjectNameToCoverDocument(template, '# OpenAI Codex\n\n这段正文不应进入封面')
+
+    expect(result.elements[0]).toMatchObject({ type: 'text', text: 'OpenAI Codex' })
+    expect(result.elements.slice(1)).toEqual(template.elements.slice(1))
   })
 
   it('rejects unknown document versions', () => {

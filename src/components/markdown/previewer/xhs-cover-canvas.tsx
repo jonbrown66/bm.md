@@ -161,6 +161,16 @@ export function XhsCoverCanvas({
       tabIndex={editable ? 0 : undefined}
       onPointerDown={() => editable && onSelectedElementIdChange?.(null)}
       onKeyDown={(event) => {
+        const target = event.target
+        if (
+          target instanceof HTMLInputElement
+          || target instanceof HTMLTextAreaElement
+          || target instanceof HTMLSelectElement
+          || target instanceof HTMLButtonElement
+          || (target instanceof HTMLElement && target.isContentEditable)
+        ) {
+          return
+        }
         if (!editable || !selectedElementId) {
           return
         }

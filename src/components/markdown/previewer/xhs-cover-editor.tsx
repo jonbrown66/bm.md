@@ -1,7 +1,7 @@
 import type { ChangeEvent } from 'react'
 import type { XhsCoverDocument, XhsCoverElement, XhsCoverTextElement } from '@/lib/xhs/cover-document'
 import { ImagePlus, Redo2, Type, Undo2 } from 'lucide-react'
-import { useMemo, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 import {
   AlertDialog,
@@ -66,10 +66,7 @@ export function XhsCoverEditor({
   const initialDocumentRef = useRef(document)
   const imageInputRef = useRef<HTMLInputElement>(null)
 
-  const dirty = useMemo(
-    () => JSON.stringify(draftDocument) !== JSON.stringify(initialDocumentRef.current),
-    [draftDocument],
-  )
+  const dirty = draftDocument !== initialDocumentRef.current
 
   const commitDocument = (nextDocument: XhsCoverDocument) => {
     setHistory((current) => {

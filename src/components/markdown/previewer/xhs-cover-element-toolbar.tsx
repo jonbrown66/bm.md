@@ -1,5 +1,8 @@
+import type { ChangeEvent } from 'react'
 import type { XhsCoverElement, XhsCoverTextElement } from '@/lib/xhs/cover-document'
-import { AlignCenter, AlignLeft, AlignRight, Bold, Trash2 } from 'lucide-react'
+import { AlignCenter, AlignLeft, AlignRight, Bold, ImageUp, Trash2 } from 'lucide-react'
+import { useRef } from 'react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
@@ -17,6 +20,36 @@ export function XhsCoverElementToolbar({
   onDelete,
 }: XhsCoverElementToolbarProps) {
   const textElement = element.type === 'text' ? element : null
+  const replacementInputRef = useRef<HTMLInputElement>(null)
+
+  const replaceImage = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file || element.type !== 'image') {
+      return
+    }
+    if (!['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/svg+xml'].includes(file.type)) {
+      toast.error('请选择 PNG、JPG、WebP、GIF 或 SVG 图片')
+      return
+    }
+
+    const reader = new FileReader()
+    reader.addEventListener('load', () => {
+      const src = String(reader.result)
+      const image = new Image()
+      image.addEventListener('load', () => {
+        onUpdate({
+          src,
+          aspectRatio: image.naturalWidth / image.naturalHeight,
+          alt: file.name,
+        } as Partial<XhsCoverElement>)
+      }, { once: true })
+      image.addEventListener('error', () => toast.error('图片读取失败，请更换图片后重试'), { once: true })
+      image.src = src
+    }, { once: true })
+    reader.addEventListener('error', () => toast.error('图片读取失败，请更换图片后重试'), { once: true })
+    reader.readAsDataURL(file)
+  }
 
   return (
     <div
@@ -27,6 +60,7 @@ export function XhsCoverElementToolbar({
       `}
       style={{ transform: `scale(${Math.min(1.25, 1 / canvasScale)})`, transformOrigin: 'bottom left' }}
       onPointerDown={event => event.stopPropagation()}
+      onKeyDown={event => event.stopPropagation()}
     >
       {textElement && (
         <>
@@ -178,6 +212,31 @@ export function XhsCoverElementToolbar({
             aria-label="封面文字圆角"
             title="圆角"
           />
+        </>
+      )}
+      {element.type === 'image' && (
+        <>
+          <input
+            ref={replacementInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,.svg"
+            className="hidden"
+            onChange={replaceImage}
+          />
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className={`
+              size-8 bg-white text-black
+              hover:bg-neutral-100 hover:text-black
+            `}
+            onClick={() => replacementInputRef.current?.click()}
+            aria-label="替换封面图片"
+            title="替换图片"
+          >
+            <ImageUp className="size-3.5" />
+          </Button>
         </>
       )}
       <Button

@@ -39,7 +39,7 @@ const XHS_SOURCE_FOOTER_SAFE_AREA = Math.round(34 * XHS_LAYOUT_SCALE)
 const XHS_USABLE_PAGE_HEIGHT = XHS_SOURCE_PAGE_HEIGHT - XHS_SOURCE_FOOTER_SAFE_AREA
 const XHS_SPARSE_PAGE_HEIGHT = Math.round(112 * XHS_LAYOUT_SCALE)
 const XHS_PAGE_HEIGHT_TOLERANCE = 45
-const XHS_MIN_MEDIA_FIT_SCALE = 0.7
+const XHS_MIN_MEDIA_FIT_SCALE = 0.8
 const XHS_RENDER_DEBOUNCE_MS = 250
 
 const XHS_THEME_SURFACES: Record<string, string> = {
@@ -1086,7 +1086,6 @@ function mergeImageOnlyPages(pages: XhsRenderedPage[], probe: HTMLElement) {
       probe,
       onlyElement,
       previousPage.html,
-      0.05,
     )
     if (!fittedHtml) {
       continue
@@ -1643,10 +1642,27 @@ function blobToDataUrl(blob: Blob) {
   })
 }
 
-async function inlineRemoteImages(container: HTMLElement) {
+const inlineImageCache = new Map<string, string>()
+const MAX_INLINE_IMAGE_CACHE_SIZE = 64
+
+function cacheInlineImage(url: string, dataUrl: string) {
+  if (inlineImageCache.size >= MAX_INLINE_IMAGE_CACHE_SIZE) {
+    const oldestKey = inlineImageCache.keys().next().value
+    if (oldestKey) {
+      inlineImageCache.delete(oldestKey)
+    }
+  }
+  inlineImageCache.set(url, dataUrl)
+}
+
+async function inlineRemoteImages(container: HTMLElement, signal: AbortSignal) {
   const images = Array.from(container.querySelectorAll('img'))
 
   await Promise.all(images.map(async (image) => {
+    if (signal.aborted) {
+      return
+    }
+
     const source = image.currentSrc || image.src
     if (!source || source.startsWith('data:') || source.startsWith('blob:')) {
       return
@@ -1665,16 +1681,33 @@ async function inlineRemoteImages(container: HTMLElement) {
     }
 
     try {
-      const response = await fetch(url.href)
+      const cached = inlineImageCache.get(url.href)
+      if (cached) {
+        image.src = cached
+        image.removeAttribute('srcset')
+        image.removeAttribute('sizes')
+        return
+      }
+
+      const response = await fetch(url.href, { signal })
       if (!response.ok) {
         return
       }
 
-      image.src = await blobToDataUrl(await response.blob())
+      const dataUrl = await blobToDataUrl(await response.blob())
+      if (signal.aborted) {
+        return
+      }
+
+      cacheInlineImage(url.href, dataUrl)
+      image.src = dataUrl
       image.removeAttribute('srcset')
       image.removeAttribute('sizes')
     }
     catch (error) {
+      if (signal.aborted) {
+        return
+      }
       console.warn('Inline XHS image failed:', source, error)
     }
   }))
@@ -1710,6 +1743,8 @@ export function XhsPreview() {
   const exportPagesRef = useRef<HTMLDivElement>(null)
   const overflowFixCountRef = useRef(0)
   const renderSeqRef = useRef(0)
+  const prepareSeqRef = useRef(0)
+  const paginationSeqRef = useRef(0)
   const [renderedPages, setRenderedPages] = useState<XhsRenderedPage[]>([])
   const [isRendering, setIsRendering] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
@@ -1736,7 +1771,7 @@ export function XhsPreview() {
           setHasCustomCover(true)
         }
         else {
-          setCoverDocument(createDefaultCoverDocument(''))
+          setCoverDocument(createDefaultCoverDocument(content))
           setHasCustomCover(false)
         }
       }
@@ -1811,9 +1846,12 @@ export function XhsPreview() {
   }, [deferredContent, markdownStyle, codeTheme, customCss, enableFootnoteLinks, openLinksInNewWindow, scheduleRender])
 
   useEffect(() => {
-    let active = true
+    const seq = prepareSeqRef.current + 1
+    prepareSeqRef.current = seq
+    const abortController = new AbortController()
     if (!renderedHtml) {
       setPreparedHtml('')
+      setIsPreparing(false)
       return
     }
 
@@ -1824,7 +1862,15 @@ export function XhsPreview() {
         temp.innerHTML = cleanInlineStyles(renderedHtml)
 
         await renderMermaidNodes(temp)
-        await inlineRemoteImages(temp)
+        if (seq !== prepareSeqRef.current) {
+          return
+        }
+
+        await inlineRemoteImages(temp, abortController.signal)
+        if (seq !== prepareSeqRef.current) {
+          return
+        }
+
         await waitForImages(temp)
 
         // 此时所有的 img 元素已经彻底加载完毕，naturalWidth 和 naturalHeight 均已就绪。
@@ -1866,18 +1912,18 @@ export function XhsPreview() {
           )
         })
 
-        if (active) {
+        if (seq === prepareSeqRef.current) {
           setPreparedHtml(temp.innerHTML)
         }
       }
       catch (err) {
         console.error('XHS HTML prepare error:', err)
-        if (active) {
+        if (seq === prepareSeqRef.current) {
           setPreparedHtml(cleanInlineStyles(renderedHtml))
         }
       }
       finally {
-        if (active) {
+        if (seq === prepareSeqRef.current) {
           setIsPreparing(false)
         }
       }
@@ -1885,11 +1931,13 @@ export function XhsPreview() {
 
     void prepare()
     return () => {
-      active = false
+      abortController.abort()
     }
   }, [renderedHtml])
 
   const calculatePages = useCallback(async () => {
+    const seq = paginationSeqRef.current + 1
+    paginationSeqRef.current = seq
     const measure = measureRef.current
     if (!measure || !preparedHtml) {
       setRenderedPages([])
@@ -1897,7 +1945,14 @@ export function XhsPreview() {
     }
 
     await document.fonts.ready
-    setRenderedPages(buildSemanticPages(measure, xhsPaginationMode))
+    if (seq !== paginationSeqRef.current) {
+      return
+    }
+
+    const pages = buildSemanticPages(measure, xhsPaginationMode)
+    if (seq === paginationSeqRef.current) {
+      setRenderedPages(pages)
+    }
   }, [preparedHtml, xhsPaginationMode])
 
   useEffect(() => {
