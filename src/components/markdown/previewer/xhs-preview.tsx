@@ -41,6 +41,7 @@ const XHS_SPARSE_PAGE_HEIGHT = Math.round(112 * XHS_LAYOUT_SCALE)
 const XHS_PAGE_HEIGHT_TOLERANCE = 45
 const XHS_MIN_MEDIA_FIT_SCALE = 0.8
 const XHS_RENDER_DEBOUNCE_MS = 250
+const XHS_AUTHOR_PRESETS = ['AI首席情报员-阿布', '开源小聪明'] as const
 
 const XHS_THEME_SURFACES: Record<string, string> = {
   botanical: '#fffffe',
@@ -2164,6 +2165,20 @@ export function XhsPreview() {
                       placeholder="@作者"
                       aria-label="小红书左下角作者"
                     />
+                    <div className="flex flex-wrap gap-1.5" aria-label="作者快捷填充">
+                      {XHS_AUTHOR_PRESETS.map(author => (
+                        <Button
+                          key={author}
+                          type="button"
+                          variant={xhsAuthorName === author ? 'secondary' : 'outline'}
+                          size="xs"
+                          className="rounded-md font-normal"
+                          onClick={() => setXhsAuthorName(author)}
+                        >
+                          {author}
+                        </Button>
+                      ))}
+                    </div>
                   </div>
                   <div className={`
                     flex items-center justify-between rounded-md border px-3
