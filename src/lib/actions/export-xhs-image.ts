@@ -1,5 +1,7 @@
 import { toast } from 'sonner'
 
+const XHS_EXPORT_DPR = 2
+
 function blobToDataUrl(blob: Blob) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader()
@@ -119,7 +121,7 @@ async function capturePage(
   try {
     const snapshot = await snapdom(page, {
       cache: 'full',
-      dpr: 1,
+      dpr: XHS_EXPORT_DPR,
       embedFonts: true,
       fast: true,
       height: page.offsetHeight,
@@ -128,7 +130,7 @@ async function capturePage(
     })
 
     const image = await snapshot.toPng({
-      dpr: 1,
+      dpr: XHS_EXPORT_DPR,
       height: page.offsetHeight,
       width: page.offsetWidth,
     })

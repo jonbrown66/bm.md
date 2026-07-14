@@ -999,6 +999,22 @@ function fitsPage(probe: HTMLElement, html: string) {
   return getArticleHeight(probe, html) <= XHS_USABLE_PAGE_HEIGHT + XHS_PAGE_HEIGHT_TOLERANCE
 }
 
+function getSingleImage(element: HTMLElement) {
+  const image = element.matches('img')
+    ? element as HTMLImageElement
+    : element.querySelector<HTMLImageElement>('img')
+  const mediaCount = element.matches('img, video, svg, canvas, iframe')
+    ? 1
+    : element.querySelectorAll('img, video, svg, canvas, iframe').length
+
+  return image && mediaCount === 1 ? image : null
+}
+
+function getImageFitScale(image: HTMLImageElement) {
+  const scale = Number.parseFloat(image.dataset.xhsFitScale ?? '1')
+  return Number.isFinite(scale) && scale > 0 ? scale : 1
+}
+
 function fitImageBlockToAvailableHeight(
   probe: HTMLElement,
   element: HTMLElement,
@@ -1012,14 +1028,8 @@ function fitImageBlockToAvailableHeight(
     return null
   }
 
-  const image = measuredElement.matches('img')
-    ? measuredElement as HTMLImageElement
-    : measuredElement.querySelector<HTMLImageElement>('img')
-  const mediaCount = measuredElement.matches('img, video, svg, canvas, iframe')
-    ? 1
-    : measuredElement.querySelectorAll('img, video, svg, canvas, iframe').length
-
-  if (!image || mediaCount !== 1) {
+  const image = getSingleImage(measuredElement)
+  if (!image) {
     return null
   }
 
@@ -1046,9 +1056,7 @@ function fitImageBlockToAvailableHeight(
   }
 
   const fitted = element.cloneNode(true) as HTMLElement
-  const fittedImage = fitted.matches('img')
-    ? fitted as HTMLImageElement
-    : fitted.querySelector<HTMLImageElement>('img')
+  const fittedImage = getSingleImage(fitted)
   if (!fittedImage) {
     return null
   }
@@ -1056,9 +1064,62 @@ function fitImageBlockToAvailableHeight(
   fittedImage.style.setProperty('width', `${Math.round(imageRect.width * scale)}px`, 'important')
   fittedImage.style.setProperty('height', 'auto', 'important')
   fittedImage.style.setProperty('max-height', 'none', 'important')
+  fittedImage.dataset.xhsFitScale = String(getImageFitScale(image) * scale)
 
   const fittedHtml = fitted.outerHTML
   return fitsPage(probe, `${currentHtml}${fittedHtml}`) ? fittedHtml : null
+}
+
+function fitLastImageBlockOnMeasuredPage(page: XhsRenderedPage, probe: HTMLElement) {
+  const container = document.createElement('div')
+  container.innerHTML = page.html
+  const lastElement = container.lastElementChild
+  if (!(lastElement instanceof HTMLElement) || !getSingleImage(lastElement)) {
+    return false
+  }
+
+  lastElement.remove()
+  const fittedHtml = fitImageBlockToAvailableHeight(probe, lastElement, container.innerHTML)
+  if (!fittedHtml) {
+    return false
+  }
+
+  page.html = normalizePageHtml(`${container.innerHTML}${fittedHtml}`)
+  return true
+}
+
+function fitLeadingImageBlockToPage(
+  pageHtml: string,
+  next: HTMLElement,
+  probe: HTMLElement,
+) {
+  const firstElement = next.firstElementChild
+  if (!(firstElement instanceof HTMLElement)) {
+    return null
+  }
+
+  if (getSingleImage(firstElement)) {
+    const fittedHtml = fitImageBlockToAvailableHeight(probe, firstElement, pageHtml)
+    return fittedHtml ? { fittedHtml, elements: [firstElement] } : null
+  }
+
+  const secondElement = firstElement.nextElementSibling
+  if (!isHeadingTag(firstElement.tagName)
+    || !(secondElement instanceof HTMLElement)
+    || !getSingleImage(secondElement)) {
+    return null
+  }
+
+  const headingHtml = firstElement.outerHTML
+  const fittedImageHtml = fitImageBlockToAvailableHeight(
+    probe,
+    secondElement,
+    `${pageHtml}${headingHtml}`,
+  )
+
+  return fittedImageHtml
+    ? { fittedHtml: `${headingHtml}${fittedImageHtml}`, elements: [firstElement, secondElement] }
+    : null
 }
 
 function mergeImageOnlyPages(pages: XhsRenderedPage[], probe: HTMLElement) {
@@ -1265,6 +1326,14 @@ function compactPages(pages: XhsRenderedPage[], probe: HTMLElement) {
         : firstNextElement.outerHTML
       const candidateHtml = `${page.html}${moveHtml}`
       if (!fitsPage(probe, candidateHtml)) {
+        const fitted = fitLeadingImageBlockToPage(page.html, next, probe)
+        if (fitted) {
+          page.html = `${page.html}${fitted.fittedHtml}`
+          fitted.elements.forEach(element => element.remove())
+          firstNextElement = next.firstElementChild
+          continue
+        }
+
         break
       }
 
@@ -1464,11 +1533,71 @@ function normalizeOverflowPages(pages: XhsRenderedPage[], probe: HTMLElement) {
     ) {
       iteration += 1
 
+      const page = pages[index]
+      if (page && fitLastImageBlockOnMeasuredPage(page, probe)) {
+        continue
+      }
+
       if (!moveLastElementToNextPage(pages, index)) {
         break
       }
     }
   }
+}
+
+function fitLastImageBlockOnRenderedPage(
+  page: XhsRenderedPage,
+  renderedPage: HTMLElement,
+) {
+  const article = renderedPage.querySelector<HTMLElement>('.xhs-article')
+  const content = article?.querySelector<HTMLElement>('#bm-md')
+  const renderedLastElement = content?.lastElementChild
+  if (!article || !content || !(renderedLastElement instanceof HTMLElement)) {
+    return false
+  }
+
+  const renderedImage = getSingleImage(renderedLastElement)
+  if (!renderedImage) {
+    return false
+  }
+
+  const articleRect = article.getBoundingClientRect()
+  const contentRect = content.getBoundingClientRect()
+  const imageRect = renderedImage.getBoundingClientRect()
+  const safeBottom = articleRect.top + XHS_USABLE_PAGE_HEIGHT
+  const boundsOverflow = contentRect.bottom - safeBottom - XHS_PAGE_HEIGHT_TOLERANCE
+  const scrollOverflow = article.scrollHeight - article.clientHeight - XHS_PAGE_HEIGHT_TOLERANCE
+  const overflow = Math.ceil(Math.max(boundsOverflow, scrollOverflow, 0))
+  if (overflow <= 0 || imageRect.width <= 0 || imageRect.height <= overflow) {
+    return false
+  }
+
+  const relativeScale = Math.min(1, (imageRect.height - overflow - 1) / imageRect.height)
+  const currentScale = getImageFitScale(renderedImage)
+  const nextScale = currentScale * relativeScale
+  if (relativeScale >= 1 || nextScale + 0.001 < XHS_MIN_MEDIA_FIT_SCALE) {
+    return false
+  }
+
+  const container = document.createElement('div')
+  container.innerHTML = page.html
+  const sourceLastElement = container.lastElementChild
+  if (!(sourceLastElement instanceof HTMLElement)) {
+    return false
+  }
+
+  const sourceImage = getSingleImage(sourceLastElement)
+  if (!sourceImage) {
+    return false
+  }
+
+  sourceImage.style.setProperty('width', `${Math.round(imageRect.width * relativeScale)}px`, 'important')
+  sourceImage.style.setProperty('height', 'auto', 'important')
+  sourceImage.style.setProperty('max-height', 'none', 'important')
+  sourceImage.dataset.xhsFitScale = String(nextScale)
+  page.html = normalizePageHtml(container.innerHTML)
+
+  return true
 }
 
 function getOverflowingExportPageIndex(container: HTMLElement) {
@@ -2026,10 +2155,15 @@ export function XhsPreview() {
         return
       }
 
-      const overflowIndex = getOverflowingExportPageIndex(exportPages) - 1
+      const overflowingExportPageIndex = getOverflowingExportPageIndex(exportPages)
+      const overflowIndex = overflowingExportPageIndex - 1
       if (overflowIndex < 0) {
         return
       }
+
+      const renderedExportPage = exportPages.querySelectorAll<HTMLElement>(
+        '[data-xhs-export-page="true"]',
+      )[overflowingExportPageIndex]
 
       if (overflowFixCountRef.current > renderedPages.length * 8 + 24) {
         console.warn('XHS pagination overflow could not be fully resolved')
@@ -2038,6 +2172,14 @@ export function XhsPreview() {
 
       setRenderedPages((previousPages) => {
         const nextPages = previousPages.map(page => ({ ...page }))
+        const overflowingPage = nextPages[overflowIndex]
+        if (overflowingPage
+          && renderedExportPage
+          && fitLastImageBlockOnRenderedPage(overflowingPage, renderedExportPage)) {
+          overflowFixCountRef.current += 1
+          return nextPages
+        }
+
         const moved = moveLastElementToNextPage(nextPages, overflowIndex)
         if (!moved) {
           return previousPages

@@ -1,7 +1,11 @@
 import type { CaptureResult } from '@zumer/snapdom'
+import fileSaver from 'file-saver'
 import { toast } from 'sonner'
 import { copyImage as copyImageToClipboard } from '@/lib/clipboard'
 import { getPreviewElement } from './preview'
+
+const IMAGE_EXPORT_DPR = 2
+const { saveAs } = fileSaver
 
 async function createPreviewSnapshot(): Promise<CaptureResult | null> {
   const previewContent = getPreviewElement()
@@ -18,7 +22,12 @@ export async function exportImage() {
     if (!snapshot)
       return
 
-    await snapshot.download({ filename: 'bm.md.jpg', quality: 0.99 })
+    const blob = await snapshot.toBlob({
+      type: 'jpeg',
+      quality: 0.99,
+      dpr: IMAGE_EXPORT_DPR,
+    })
+    saveAs(blob, 'bm.md.jpg')
     toast.success('已导出图片')
   }
   catch (error) {
@@ -33,7 +42,10 @@ export async function copyImage() {
     if (!snapshot)
       return
 
-    const blob = await snapshot.toBlob({ type: 'png' })
+    const blob = await snapshot.toBlob({
+      type: 'png',
+      dpr: IMAGE_EXPORT_DPR,
+    })
     await copyImageToClipboard(blob)
     toast.success('已复制图片到剪贴板')
   }

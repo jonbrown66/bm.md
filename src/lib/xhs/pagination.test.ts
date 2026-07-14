@@ -82,4 +82,22 @@ describe('getMediaFitScale', () => {
       minScale: 0.8,
     })).toBeCloseTo(5 / 6)
   })
+
+  it('accepts the 80% boundary but rejects anything smaller', () => {
+    expect(getMediaFitScale({
+      availableHeight: 320,
+      blockHeight: 400,
+      mediaHeight: 400,
+      tolerance: 0,
+      minScale: 0.8,
+    })).toBeCloseTo(0.8)
+
+    expect(getMediaFitScale({
+      availableHeight: 319,
+      blockHeight: 400,
+      mediaHeight: 400,
+      tolerance: 0,
+      minScale: 0.8,
+    })).toBeNull()
+  })
 })
