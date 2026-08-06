@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatXhsPageFooter } from './footer'
+import { formatXhsContentPageFooter, formatXhsPageFooter } from './footer'
 
 describe('xhs page footer', () => {
   it('formats ordered page footer with at least two digits', () => {
@@ -14,5 +14,10 @@ describe('xhs page footer', () => {
   it('keeps page number within the available page range', () => {
     expect(formatXhsPageFooter(0, 5)).toBe('01 / 05')
     expect(formatXhsPageFooter(9, 5)).toBe('05 / 05')
+  })
+
+  it('starts content page footers at 01 after the cover', () => {
+    expect(formatXhsContentPageFooter(0, 3)).toBe('01 / 03')
+    expect(formatXhsContentPageFooter(2, 3)).toBe('03 / 03')
   })
 })

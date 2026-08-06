@@ -8,3 +8,7 @@ export function formatXhsPageFooter(pageNumber: number, totalPages: number) {
 
   return `${String(normalizedPage).padStart(digits, '0')} / ${String(normalizedTotal).padStart(digits, '0')}`
 }
+
+export function formatXhsContentPageFooter(pageIndex: number, totalContentPages: number) {
+  return formatXhsPageFooter(pageIndex + 1, totalContentPages)
+}

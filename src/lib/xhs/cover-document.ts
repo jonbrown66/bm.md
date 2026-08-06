@@ -1,5 +1,11 @@
 export const XHS_COVER_WIDTH = 720 as const
 export const XHS_COVER_HEIGHT = 960 as const
+export const XHS_DEFAULT_TEXT_SHADOW = {
+  color: '#2e85ff',
+  offsetX: 5,
+  offsetY: 5,
+  blur: 0,
+} as const
 
 export interface XhsCoverElementBase {
   id: string
@@ -17,6 +23,13 @@ export interface XhsCoverTextElement extends XhsCoverElementBase {
   fontSize: number
   fontWeight: number
   color: string
+  highlightColor: string
+  textStrokeColor: string
+  textStrokeWidth: number
+  textShadowColor: string
+  textShadowOffsetX: number
+  textShadowOffsetY: number
+  textShadowBlur: number
   textAlign: 'left' | 'center' | 'right'
   verticalAlign: 'top' | 'middle' | 'bottom'
   lineHeight: number
@@ -106,6 +119,13 @@ export function createDefaultCoverDocument(markdown: string): XhsCoverDocument {
       fontSize: 120,
       fontWeight: 700,
       color: '#111111',
+      highlightColor: 'transparent',
+      textStrokeColor: '#ffffff',
+      textStrokeWidth: 0,
+      textShadowColor: XHS_DEFAULT_TEXT_SHADOW.color,
+      textShadowOffsetX: XHS_DEFAULT_TEXT_SHADOW.offsetX,
+      textShadowOffsetY: XHS_DEFAULT_TEXT_SHADOW.offsetY,
+      textShadowBlur: XHS_DEFAULT_TEXT_SHADOW.blur,
       textAlign: 'center',
       verticalAlign: 'middle',
       lineHeight: 1.15,
@@ -139,6 +159,13 @@ export function createDefaultCoverDocument(markdown: string): XhsCoverDocument {
       fontSize: 35,
       fontWeight: 400,
       color: '#ffffff',
+      highlightColor: 'transparent',
+      textStrokeColor: '#ffffff',
+      textStrokeWidth: 0,
+      textShadowColor: XHS_DEFAULT_TEXT_SHADOW.color,
+      textShadowOffsetX: XHS_DEFAULT_TEXT_SHADOW.offsetX,
+      textShadowOffsetY: XHS_DEFAULT_TEXT_SHADOW.offsetY,
+      textShadowBlur: XHS_DEFAULT_TEXT_SHADOW.blur,
       textAlign: 'center',
       verticalAlign: 'middle',
       lineHeight: 1.2,
@@ -190,6 +217,23 @@ function parseElement(value: unknown): XhsCoverElement | null {
       verticalAlign: ['top', 'middle', 'bottom'].includes(String(element.verticalAlign))
         ? element.verticalAlign
         : 'top',
+      highlightColor: typeof element.highlightColor === 'string' ? element.highlightColor : 'transparent',
+      textStrokeColor: typeof element.textStrokeColor === 'string' ? element.textStrokeColor : '#ffffff',
+      textStrokeWidth: isFiniteNumber(element.textStrokeWidth)
+        ? Math.min(24, Math.max(0, element.textStrokeWidth))
+        : 0,
+      textShadowColor: typeof element.textShadowColor === 'string'
+        ? element.textShadowColor
+        : XHS_DEFAULT_TEXT_SHADOW.color,
+      textShadowOffsetX: isFiniteNumber(element.textShadowOffsetX)
+        ? Math.min(60, Math.max(-60, element.textShadowOffsetX))
+        : XHS_DEFAULT_TEXT_SHADOW.offsetX,
+      textShadowOffsetY: isFiniteNumber(element.textShadowOffsetY)
+        ? Math.min(60, Math.max(-60, element.textShadowOffsetY))
+        : XHS_DEFAULT_TEXT_SHADOW.offsetY,
+      textShadowBlur: isFiniteNumber(element.textShadowBlur)
+        ? Math.min(60, Math.max(0, element.textShadowBlur))
+        : XHS_DEFAULT_TEXT_SHADOW.blur,
       backgroundColor: typeof element.backgroundColor === 'string' ? element.backgroundColor : 'transparent',
       borderColor: typeof element.borderColor === 'string' ? element.borderColor : '#111111',
       borderWidth: isFiniteNumber(element.borderWidth) ? element.borderWidth : 0,

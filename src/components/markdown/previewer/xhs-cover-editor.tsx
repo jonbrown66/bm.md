@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { XHS_DEFAULT_TEXT_SHADOW } from '@/lib/xhs/cover-document'
 import { commitCoverHistory, createCoverHistory, redoCoverHistory, undoCoverHistory } from '@/lib/xhs/cover-history'
 import { saveCoverDocument } from '@/lib/xhs/cover-storage'
 import { XhsCoverCanvas } from './xhs-cover-canvas'
@@ -99,6 +100,13 @@ export function XhsCoverEditor({
       fontSize: 48,
       fontWeight: 400,
       color: '#111111',
+      highlightColor: 'transparent',
+      textStrokeColor: '#ffffff',
+      textStrokeWidth: 0,
+      textShadowColor: XHS_DEFAULT_TEXT_SHADOW.color,
+      textShadowOffsetX: XHS_DEFAULT_TEXT_SHADOW.offsetX,
+      textShadowOffsetY: XHS_DEFAULT_TEXT_SHADOW.offsetY,
+      textShadowBlur: XHS_DEFAULT_TEXT_SHADOW.blur,
       textAlign: 'center',
       verticalAlign: 'middle',
       lineHeight: 1.25,

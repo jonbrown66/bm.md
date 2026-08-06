@@ -14,7 +14,7 @@ import { exportXhsImage, exportXhsImages } from '@/lib/actions'
 import { getMarkdownLocaleTexts } from '@/lib/locale'
 import { createDefaultCoverDocument } from '@/lib/xhs/cover-document'
 import { getCoverDocument } from '@/lib/xhs/cover-storage'
-import { formatXhsPageFooter } from '@/lib/xhs/footer'
+import { formatXhsContentPageFooter } from '@/lib/xhs/footer'
 import { padMermaidViewBox } from '@/lib/xhs/mermaid-style'
 import { getMediaFitScale } from '@/lib/xhs/pagination'
 import { getXhsFontOption, getXhsTextFlowCss, XHS_FONT_OPTIONS } from '@/lib/xhs/typography'
@@ -2454,8 +2454,8 @@ export function XhsPreview() {
           <XhsPage
             coverDocument={coverDocument}
             markdownStyle={markdownStyle}
-            authorName={xhsAuthorName}
-            footerLabel={xhsShowFooter ? formatXhsPageFooter(1, totalPageCount) : ''}
+            authorName=""
+            footerLabel=""
             exportPage
           />
           {renderedPages.map((page, index) => (
@@ -2465,7 +2465,7 @@ export function XhsPreview() {
               markdownStyle={markdownStyle}
               authorName={xhsAuthorName}
               footerLabel={xhsShowFooter
-                ? formatXhsPageFooter(index + 2, totalPageCount)
+                ? formatXhsContentPageFooter(index, renderedPages.length)
                 : ''}
               exportPage
             />
@@ -2536,8 +2536,8 @@ export function XhsPreview() {
                   <XhsPage
                     coverDocument={coverDocument}
                     markdownStyle={markdownStyle}
-                    authorName={xhsAuthorName}
-                    footerLabel={xhsShowFooter ? formatXhsPageFooter(1, totalPageCount) : ''}
+                    authorName=""
+                    footerLabel=""
                   />
                 </div>
               </div>
@@ -2594,7 +2594,7 @@ export function XhsPreview() {
                       markdownStyle={markdownStyle}
                       authorName={xhsAuthorName}
                       footerLabel={xhsShowFooter
-                        ? formatXhsPageFooter(index + 2, totalPageCount)
+                        ? formatXhsContentPageFooter(index, renderedPages.length)
                         : ''}
                     />
                   </div>

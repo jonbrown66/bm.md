@@ -1,5 +1,5 @@
 import type { PointerEvent as ReactPointerEvent } from 'react'
-import type { XhsCoverDocument, XhsCoverElement } from '@/lib/xhs/cover-document'
+import type { XhsCoverDocument, XhsCoverElement, XhsCoverTextElement } from '@/lib/xhs/cover-document'
 import { useRef, useState } from 'react'
 import { clampCoverElement, removeCoverElement, updateCoverElement } from '@/lib/xhs/cover-document'
 import { XhsCoverElementToolbar } from './xhs-cover-element-toolbar'
@@ -25,6 +25,57 @@ interface PointerInteraction {
 }
 
 const RESIZE_CORNERS: ResizeCorner[] = ['nw', 'ne', 'sw', 'se']
+
+function getTextStroke(element: XhsCoverTextElement) {
+  return element.textStrokeWidth > 0
+    ? `${element.textStrokeWidth}px ${element.textStrokeColor}`
+    : '0px transparent'
+}
+
+function getTextShadow(element: XhsCoverTextElement) {
+  return element.textShadowColor === 'transparent'
+    ? 'none'
+    : `${element.textShadowOffsetX}px ${element.textShadowOffsetY}px ${element.textShadowBlur}px ${element.textShadowColor}`
+}
+
+function getTextEffectStyle(element: XhsCoverTextElement) {
+  return {
+    WebkitTextStroke: getTextStroke(element),
+    paintOrder: 'stroke fill' as const,
+    textShadow: getTextShadow(element),
+  }
+}
+
+function getScribbleHighlightStyle(element: XhsCoverTextElement) {
+  if (element.highlightColor === 'transparent') {
+    return {
+      backgroundImage: 'none',
+      padding: 0,
+    }
+  }
+
+  const highlightColor = /^#[\da-f]{3}(?:[\da-f]{3})?$/i.test(element.highlightColor)
+    ? element.highlightColor
+    : '#fff1a8'
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 48" preserveAspectRatio="none">
+      <path fill="${highlightColor}" fill-opacity=".62" d="M-2 13 C9 8 17 14 28 10 S48 13 59 9 S83 13 102 7 L102 35 C88 39 75 32 62 37 S38 33 24 40 C14 36 5 42 -2 37 Z"/>
+      <path fill="${highlightColor}" fill-opacity=".28" d="M-3 19 C9 14 20 20 32 16 S52 19 67 15 S87 19 103 13 L103 42 C89 45 74 38 59 44 S38 39 24 45 C14 42 5 47 -3 43 Z"/>
+      <path fill="${highlightColor}" fill-opacity=".16" d="M-1 7 C12 4 22 9 35 6 S54 9 68 5 S87 9 101 4 L101 28 C87 31 74 25 61 30 S38 26 24 33 C13 29 6 34 -1 30 Z"/>
+    </svg>
+  `
+
+  return {
+    backgroundColor: 'transparent',
+    backgroundImage: `url("data:image/svg+xml,${encodeURIComponent(svg)}")`,
+    backgroundPosition: 'center',
+    backgroundRepeat: 'no-repeat',
+    backgroundSize: '100% 100%',
+    boxDecorationBreak: 'clone' as const,
+    WebkitBoxDecorationBreak: 'clone' as const,
+    padding: '0.12em 0.2em',
+  }
+}
 
 export function XhsCoverCanvas({
   document,
@@ -263,6 +314,7 @@ export function XhsCoverCanvas({
                           color: element.color,
                           textAlign: element.textAlign,
                           lineHeight: element.lineHeight,
+                          ...getTextEffectStyle(element),
                           backgroundColor: element.backgroundColor,
                           border: `${element.borderWidth}px solid ${element.borderColor}`,
                           borderRadius: element.borderRadius,
@@ -301,7 +353,16 @@ export function XhsCoverCanvas({
                           borderRadius: element.borderRadius,
                         }}
                       >
-                        <span className="w-full">{element.text}</span>
+                        <span className="block w-full">
+                          <span
+                            style={{
+                              ...getTextEffectStyle(element),
+                              ...getScribbleHighlightStyle(element),
+                            }}
+                          >
+                            {element.text}
+                          </span>
+                        </span>
                       </div>
                     )
                 : (
