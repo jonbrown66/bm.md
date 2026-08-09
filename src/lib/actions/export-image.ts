@@ -2,18 +2,16 @@ import type { CaptureResult } from '@zumer/snapdom'
 import fileSaver from 'file-saver'
 import { toast } from 'sonner'
 import { copyImage as copyImageToClipboard } from '@/lib/clipboard'
-import { getPreviewElement } from './preview'
+import { withPreviewImageCaptions } from './preview'
 
 const IMAGE_EXPORT_DPR = 2
 const { saveAs } = fileSaver
 
 async function createPreviewSnapshot(): Promise<CaptureResult | null> {
-  const previewContent = getPreviewElement()
-  if (!previewContent)
-    return null
-
-  const { snapdom } = await import('@zumer/snapdom')
-  return snapdom(previewContent)
+  return withPreviewImageCaptions(async ({ content }) => {
+    const { snapdom } = await import('@zumer/snapdom')
+    return snapdom(content)
+  })
 }
 
 export async function exportImage() {

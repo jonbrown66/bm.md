@@ -1,6 +1,7 @@
 import type { ComponentType } from 'react'
 import {
   BookOpen,
+  Captions,
   CloudUpload,
   Code,
   Code2,
@@ -30,6 +31,7 @@ import ZhihuIcon from '@/icons/zhihu'
 
 const iconMap = {
   BookOpen,
+  Captions,
   CloudUpload,
   Code,
   Code2,

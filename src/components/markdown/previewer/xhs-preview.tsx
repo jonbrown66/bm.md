@@ -13,7 +13,7 @@ import { mermaidConfig } from '@/config/mermaid'
 import { exportXhsImage, exportXhsImages } from '@/lib/actions'
 import { getMarkdownLocaleTexts } from '@/lib/locale'
 import { createDefaultCoverDocument } from '@/lib/xhs/cover-document'
-import { getCoverDocument } from '@/lib/xhs/cover-storage'
+import { getCoverDocument, getLatestSavedCoverStyle } from '@/lib/xhs/cover-storage'
 import { formatXhsContentPageFooter } from '@/lib/xhs/footer'
 import { padMermaidViewBox } from '@/lib/xhs/mermaid-style'
 import { getMediaFitScale } from '@/lib/xhs/pagination'
@@ -1884,25 +1884,35 @@ export function XhsPreview() {
   const [coverDocument, setCoverDocument] = useState<XhsCoverDocument>(() => createDefaultCoverDocument(content))
   const [coverEditorOpen, setCoverEditorOpen] = useState(false)
   const [hasCustomCover, setHasCustomCover] = useState(false)
+  const [coverStyleId, setCoverStyleId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!activeFileId) {
       setCoverDocument(createDefaultCoverDocument(''))
       setHasCustomCover(false)
+      setCoverStyleId(null)
       return
     }
 
     let active = true
     const load = async () => {
       const stored = await getCoverDocument(activeFileId)
+      const savedStyle = stored ? null : await getLatestSavedCoverStyle()
       if (active) {
         if (stored) {
           setCoverDocument(stored)
           setHasCustomCover(true)
+          setCoverStyleId(null)
+        }
+        else if (savedStyle) {
+          setCoverDocument(savedStyle.document)
+          setHasCustomCover(true)
+          setCoverStyleId(savedStyle.id)
         }
         else {
           setCoverDocument(createDefaultCoverDocument(content))
           setHasCustomCover(false)
+          setCoverStyleId(null)
         }
       }
     }
@@ -1921,6 +1931,7 @@ export function XhsPreview() {
   const handleCoverSaved = (doc: XhsCoverDocument) => {
     setCoverDocument(doc)
     setHasCustomCover(true)
+    setCoverStyleId(null)
   }
 
   const scheduleRender = useMemo(
@@ -2609,6 +2620,7 @@ export function XhsPreview() {
           open={coverEditorOpen}
           fileId={activeFileId}
           document={coverDocument}
+          savedStyleId={coverStyleId}
           onOpenChange={setCoverEditorOpen}
           onSaved={handleCoverSaved}
         />

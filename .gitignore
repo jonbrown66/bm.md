@@ -180,3 +180,6 @@ dev-dist/
 **/*.local*
 .claude
 .superpowers/
+
+# Local export diagnostics
+tmp/

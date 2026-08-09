@@ -25,6 +25,13 @@ describe('markdown -> html render (general)', () => {
     expect(html).toContain('这是一个段落')
   })
 
+  it('preserves image alt text as a figure caption in rendered output', async () => {
+    const html = await render({ markdown: '![示例图片](https://example.com/image.png)' })
+
+    expect(html).toContain('alt="示例图片"')
+    expect(html).toMatch(/<figcaption[^>]*>.*示例图片.*<\/figcaption>/)
+  })
+
   it('renders headings with correct tags', async () => {
     const html = await render({ markdown: '# 一级标题\n\n## 二级标题' })
 

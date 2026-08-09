@@ -1,5 +1,5 @@
-import type { PointerEvent as ReactPointerEvent } from 'react'
-import type { XhsCoverDocument, XhsCoverElement, XhsCoverTextElement } from '@/lib/xhs/cover-document'
+import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react'
+import type { XhsCoverDocument, XhsCoverElement, XhsCoverImageElement, XhsCoverTextElement } from '@/lib/xhs/cover-document'
 import { useRef, useState } from 'react'
 import { clampCoverElement, removeCoverElement, updateCoverElement } from '@/lib/xhs/cover-document'
 import { XhsCoverElementToolbar } from './xhs-cover-element-toolbar'
@@ -10,6 +10,7 @@ interface XhsCoverCanvasProps {
   document: XhsCoverDocument
   editable?: boolean
   scale?: number
+  showElementToolbar?: boolean
   selectedElementId?: string | null
   onSelectedElementIdChange?: (id: string | null) => void
   onDocumentChange?: (document: XhsCoverDocument, commit: boolean) => void
@@ -77,10 +78,65 @@ function getScribbleHighlightStyle(element: XhsCoverTextElement) {
   }
 }
 
+function colorToRgba(color: string, opacity: number) {
+  const alpha = Math.min(1, Math.max(0, opacity))
+  const normalized = color.trim()
+  const hex = normalized.match(/^#([\da-f]{3}|[\da-f]{6})$/i)?.[1]
+
+  if (hex) {
+    const expanded = hex.length === 3
+      ? hex.split('').map(value => `${value}${value}`).join('')
+      : hex
+    const red = Number.parseInt(expanded.slice(0, 2), 16)
+    const green = Number.parseInt(expanded.slice(2, 4), 16)
+    const blue = Number.parseInt(expanded.slice(4, 6), 16)
+    return `rgba(${red}, ${green}, ${blue}, ${alpha})`
+  }
+
+  const rgb = normalized.match(/^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/i)
+  if (rgb) {
+    return `rgba(${rgb[1]}, ${rgb[2]}, ${rgb[3]}, ${alpha})`
+  }
+
+  return `rgba(255, 255, 255, ${alpha})`
+}
+
+function getImageShadow(element: XhsCoverImageElement) {
+  if (element.shadowOpacity <= 0) {
+    return 'none'
+  }
+
+  return `${element.shadowOffsetX}px ${element.shadowOffsetY}px ${element.shadowBlur}px ${colorToRgba(element.shadowColor, element.shadowOpacity)}`
+}
+
+function getImageRotationTransform(element: XhsCoverImageElement) {
+  if (element.rotationX === 0 && element.rotationY === 0 && element.rotationZ === 0) {
+    return 'none'
+  }
+
+  return `perspective(900px) rotateX(${element.rotationX}deg) rotateY(${element.rotationY}deg) rotateZ(${element.rotationZ}deg)`
+}
+
+function getImageFrameStyle(element: XhsCoverImageElement): CSSProperties {
+  return {
+    borderRadius: element.borderRadius,
+    boxShadow: getImageShadow(element),
+    overflow: 'hidden',
+    position: 'relative',
+    width: '100%',
+    height: '100%',
+    isolation: 'isolate',
+    transform: getImageRotationTransform(element),
+    transformOrigin: 'center center',
+    transformStyle: 'preserve-3d',
+  } as CSSProperties
+}
+
 export function XhsCoverCanvas({
   document,
   editable = false,
   scale = 1,
+  showElementToolbar = true,
   selectedElementId = null,
   onSelectedElementIdChange,
   onDocumentChange,
@@ -208,7 +264,11 @@ export function XhsCoverCanvas({
         relative shrink-0 bg-white text-black outline-none
         ${editable ? 'overflow-visible' : 'overflow-hidden'}
       `}
-      style={{ width: document.width, height: document.height }}
+      style={{
+        width: document.width,
+        height: document.height,
+        backgroundColor: document.backgroundColor ?? '#ffffff',
+      }}
       tabIndex={editable ? 0 : undefined}
       onPointerDown={() => editable && onSelectedElementIdChange?.(null)}
       onKeyDown={(event) => {
@@ -366,25 +426,45 @@ export function XhsCoverCanvas({
                       </div>
                     )
                 : (
-                    <img
-                      src={element.src}
-                      alt={element.alt}
-                      draggable={false}
-                      className="size-full object-contain select-none"
-                      style={{
-                        pointerEvents: editable ? 'none' : undefined,
-                      }}
-                    />
+                    <div style={getImageFrameStyle(element)}>
+                      <img
+                        src={element.src}
+                        alt={element.alt}
+                        draggable={false}
+                        className="size-full object-contain select-none"
+                        style={{
+                          pointerEvents: editable ? 'none' : undefined,
+                        }}
+                      />
+                      {element.bottomBlurEnabled && (
+                        <div
+                          aria-hidden="true"
+                          className={`
+                            pointer-events-none absolute inset-x-0 bottom-0
+                          `}
+                          style={{
+                            height: `${element.bottomBlurHeight}%`,
+                            backdropFilter: `blur(${element.bottomBlurAmount}px)`,
+                            WebkitBackdropFilter: `blur(${element.bottomBlurAmount}px)`,
+                            background: `linear-gradient(to bottom, ${colorToRgba(document.backgroundColor ?? '#ffffff', 0)}, ${colorToRgba(document.backgroundColor ?? '#ffffff', 0.9)})`,
+                            maskImage: 'linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, 0.08) 28%, #000000 68%, #000000 100%)',
+                            WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, 0.08) 28%, #000000 68%, #000000 100%)',
+                          }}
+                        />
+                      )}
+                    </div>
                   )}
 
               {selected && (
                 <>
-                  <XhsCoverElementToolbar
-                    element={element}
-                    canvasScale={scale}
-                    onUpdate={patch => updateElement(element, patch)}
-                    onDelete={() => deleteElement(element)}
-                  />
+                  {showElementToolbar && editingElementId !== element.id && (
+                    <XhsCoverElementToolbar
+                      element={element}
+                      canvasScale={scale}
+                      onUpdate={patch => updateElement(element, patch)}
+                      onDelete={() => deleteElement(element)}
+                    />
+                  )}
                   {RESIZE_CORNERS.map(corner => (
                     <button
                       key={corner}

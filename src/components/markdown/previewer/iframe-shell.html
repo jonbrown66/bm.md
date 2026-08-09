@@ -20,6 +20,10 @@
         min-height: 100dvh;
       }
 
+      body[data-show-image-caption='false'] #bm-md figcaption {
+        display: none !important;
+      }
+
       @media (max-width: 376px) {
         #bm-md {
           padding-top: 48px !important;
@@ -36,5 +40,5 @@
     </style>
   </head>
 
-  <body></body>
+  <body data-show-image-caption="false"></body>
 </html>

@@ -6,6 +6,7 @@ import { usePreviewScrollSync } from '@/components/markdown/hooks/use-scroll-syn
 import { Phone } from '@/components/mockups/iphone'
 import { Safari } from '@/components/mockups/safari'
 import { mermaidConfig } from '@/config/mermaid'
+import { setPreviewImageCaptionVisibility } from '@/lib/actions/preview'
 import { getMarkdownLocaleTexts } from '@/lib/locale'
 import { useEditorStore } from '@/stores/editor'
 import { useFilesStore } from '@/stores/files'
@@ -65,6 +66,7 @@ export default function MarkdownRender() {
   const enableScrollSync = useEditorStore(state => state.enableScrollSync)
   const enableFootnoteLinks = useEditorStore(state => state.enableFootnoteLinks)
   const openLinksInNewWindow = useEditorStore(state => state.openLinksInNewWindow)
+  const showImageCaption = useEditorStore(state => state.showImageCaption)
   const previewWidth = usePreviewStore(state => state.previewWidth)
   const markdownStyle = usePreviewStore(state => state.markdownStyle)
   const codeTheme = usePreviewStore(state => state.codeTheme)
@@ -118,6 +120,7 @@ export default function MarkdownRender() {
 
   const onIframeLoad = useCallback(() => {
     iframeReadyRef.current = true
+    setPreviewImageCaptionVisibility(iframeRef.current, showImageCaption)
     onScrollSyncLoad()
 
     const htmlToRender = pendingHtmlRef.current ?? renderedHtmlRef.current
@@ -157,7 +160,13 @@ export default function MarkdownRender() {
         window.open(href, '_blank', 'noopener')
       })
     }
-  }, [onScrollSyncLoad, updateIframeContent, iframeRef])
+  }, [onScrollSyncLoad, showImageCaption, updateIframeContent, iframeRef])
+
+  useEffect(() => {
+    if (iframeReadyRef.current) {
+      setPreviewImageCaptionVisibility(iframeRef.current, showImageCaption)
+    }
+  }, [iframeRef, showImageCaption])
 
   useEffect(() => {
     if (!renderedHtml) {

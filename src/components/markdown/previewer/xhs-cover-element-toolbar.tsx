@@ -6,11 +6,12 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
-import { XHS_DEFAULT_TEXT_SHADOW } from '@/lib/xhs/cover-document'
+import { XHS_DEFAULT_IMAGE_STYLE, XHS_DEFAULT_TEXT_SHADOW } from '@/lib/xhs/cover-document'
 
 interface XhsCoverElementToolbarProps {
   element: XhsCoverElement
   canvasScale?: number
+  placement?: 'attached' | 'dock'
   onUpdate: (patch: Partial<XhsCoverElement>) => void
   onDelete: () => void
 }
@@ -39,12 +40,15 @@ function getToggleButtonClass(active: boolean, icon = false) {
 export function XhsCoverElementToolbar({
   element,
   canvasScale = 1,
+  placement = 'attached',
   onUpdate,
   onDelete,
 }: XhsCoverElementToolbarProps) {
   const textElement = element.type === 'text' ? element : null
+  const imageElement = element.type === 'image' ? element : null
   const replacementInputRef = useRef<HTMLInputElement>(null)
   const placeToolbarBelow = element.y < 280
+  const isDocked = placement === 'dock'
 
   const replaceImage = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -77,12 +81,22 @@ export function XhsCoverElementToolbar({
 
   return (
     <div
-      className={`
-        absolute left-0 z-50 flex max-w-[680px] flex-wrap items-center gap-1.5
-        rounded-lg border border-black/15 bg-white p-1.5 text-black shadow-lg
-        ${placeToolbarBelow ? 'top-full mt-3' : 'bottom-full mb-3'}
-      `}
-      style={{ transform: `scale(${Math.min(1.25, 1 / canvasScale)})`, transformOrigin: 'bottom left' }}
+      className={isDocked
+        ? `
+          relative flex w-full max-w-[680px] flex-wrap items-center gap-1.5
+          rounded-lg border border-black/15 bg-white p-1.5 text-black shadow-sm
+        `
+        : `
+          absolute left-0 z-50 flex max-w-[680px] flex-wrap items-center gap-1.5
+          rounded-lg border border-black/15 bg-white p-1.5 text-black shadow-lg
+          ${placeToolbarBelow ? 'top-full mt-3' : 'bottom-full mb-3'}
+        `}
+      style={isDocked
+        ? undefined
+        : {
+            transform: `scale(${Math.min(1.25, 1 / canvasScale)})`,
+            transformOrigin: placeToolbarBelow ? 'top left' : 'bottom left',
+          }}
       onPointerDown={event => event.stopPropagation()}
       onKeyDown={event => event.stopPropagation()}
     >
@@ -394,8 +408,225 @@ export function XhsCoverElementToolbar({
           />
         </>
       )}
-      {element.type === 'image' && (
+      {imageElement && (
         <>
+          <label className={`
+            flex h-8 items-center gap-1 rounded-md border border-black/15
+            bg-white px-2 text-xs text-black
+          `}
+          >
+            <span className="text-[11px] whitespace-nowrap text-black/60">圆角</span>
+            <Input
+              type="number"
+              min={0}
+              max={360}
+              value={imageElement.borderRadius}
+              onChange={event => onUpdate({
+                borderRadius: clampNumberInput(event.target.value, 0, 360, imageElement.borderRadius),
+              })}
+              className={`
+                h-6 w-12 border-0 bg-transparent px-0 text-xs text-black
+                shadow-none
+                focus-visible:ring-0
+              `}
+              aria-label="图片圆角"
+              title="圆角像素值"
+            />
+          </label>
+          <span className="text-[11px] text-black/60">旋转</span>
+          <label className={`
+            flex h-8 items-center gap-1 rounded-md border border-black/15
+            bg-white px-2 text-xs text-black
+          `}
+          >
+            <span className="text-[11px] text-black/60">X</span>
+            <Input
+              type="number"
+              min={-180}
+              max={180}
+              value={imageElement.rotationX}
+              onChange={event => onUpdate({
+                rotationX: clampNumberInput(event.target.value, -180, 180, imageElement.rotationX),
+              })}
+              className={`
+                h-6 w-10 border-0 bg-transparent px-0 text-xs text-black
+                shadow-none
+                focus-visible:ring-0
+              `}
+              aria-label="图片 X 轴旋转"
+              title="X 轴旋转角度"
+            />
+            <span className="text-[11px] text-black/45">°</span>
+          </label>
+          <label className={`
+            flex h-8 items-center gap-1 rounded-md border border-black/15
+            bg-white px-2 text-xs text-black
+          `}
+          >
+            <span className="text-[11px] text-black/60">Y</span>
+            <Input
+              type="number"
+              min={-180}
+              max={180}
+              value={imageElement.rotationY}
+              onChange={event => onUpdate({
+                rotationY: clampNumberInput(event.target.value, -180, 180, imageElement.rotationY),
+              })}
+              className={`
+                h-6 w-10 border-0 bg-transparent px-0 text-xs text-black
+                shadow-none
+                focus-visible:ring-0
+              `}
+              aria-label="图片 Y 轴旋转"
+              title="Y 轴旋转角度"
+            />
+            <span className="text-[11px] text-black/45">°</span>
+          </label>
+          <label className={`
+            flex h-8 items-center gap-1 rounded-md border border-black/15
+            bg-white px-2 text-xs text-black
+          `}
+          >
+            <span className="text-[11px] text-black/60">Z</span>
+            <Input
+              type="number"
+              min={-180}
+              max={180}
+              value={imageElement.rotationZ}
+              onChange={event => onUpdate({
+                rotationZ: clampNumberInput(event.target.value, -180, 180, imageElement.rotationZ),
+              })}
+              className={`
+                h-6 w-10 border-0 bg-transparent px-0 text-xs text-black
+                shadow-none
+                focus-visible:ring-0
+              `}
+              aria-label="图片 Z 轴旋转"
+              title="Z 轴旋转角度"
+            />
+            <span className="text-[11px] text-black/45">°</span>
+          </label>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className={cn(
+              getToggleButtonClass(imageElement.shadowOpacity > 0),
+              'text-xs',
+            )}
+            onClick={() => onUpdate({
+              shadowOpacity: imageElement.shadowOpacity > 0
+                ? 0
+                : 0.22,
+            })}
+            aria-label="切换图片阴影"
+            title="图片阴影"
+            aria-pressed={imageElement.shadowOpacity > 0}
+          >
+            阴影
+          </Button>
+          <input
+            type="color"
+            value={/^#[\da-f]{3}(?:[\da-f]{3})?$/i.test(imageElement.shadowColor)
+              ? imageElement.shadowColor
+              : XHS_DEFAULT_IMAGE_STYLE.shadowColor}
+            onChange={event => onUpdate({
+              shadowColor: event.target.value,
+              shadowOpacity: Math.max(0.22, imageElement.shadowOpacity),
+            })}
+            className={`
+              size-8 cursor-pointer rounded-md border border-black/15 bg-white
+              p-1
+            `}
+            aria-label="图片阴影颜色"
+            title="阴影颜色"
+          />
+          <Input
+            type="number"
+            min={0}
+            max={1}
+            step={0.05}
+            value={imageElement.shadowOpacity}
+            onChange={event => onUpdate({
+              shadowOpacity: clampNumberInput(event.target.value, 0, 1, imageElement.shadowOpacity),
+            })}
+            className={`
+              h-8 w-16 border-black/15 bg-white px-2 text-xs text-black
+            `}
+            aria-label="图片阴影透明度"
+            title="阴影透明度"
+          />
+          <Input
+            type="number"
+            min={0}
+            max={80}
+            value={imageElement.shadowBlur}
+            onChange={event => onUpdate({
+              shadowBlur: clampNumberInput(event.target.value, 0, 80, imageElement.shadowBlur),
+            })}
+            className={`
+              h-8 w-16 border-black/15 bg-white px-2 text-xs text-black
+            `}
+            aria-label="图片阴影模糊"
+            title="阴影模糊"
+          />
+          <Input
+            type="number"
+            min={-60}
+            max={60}
+            value={imageElement.shadowOffsetY}
+            onChange={event => onUpdate({
+              shadowOffsetY: clampNumberInput(event.target.value, -60, 60, imageElement.shadowOffsetY),
+            })}
+            className={`
+              h-8 w-16 border-black/15 bg-white px-2 text-xs text-black
+            `}
+            aria-label="图片阴影纵向偏移"
+            title="阴影 Y"
+          />
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className={cn(
+              getToggleButtonClass(imageElement.bottomBlurEnabled),
+              'text-xs',
+            )}
+            onClick={() => onUpdate({ bottomBlurEnabled: !imageElement.bottomBlurEnabled })}
+            aria-label="切换图片底部模糊渐变"
+            title="底部模糊渐变"
+            aria-pressed={imageElement.bottomBlurEnabled}
+          >
+            底部模糊
+          </Button>
+          <Input
+            type="number"
+            min={10}
+            max={80}
+            value={imageElement.bottomBlurHeight}
+            onChange={event => onUpdate({
+              bottomBlurHeight: clampNumberInput(event.target.value, 10, 80, imageElement.bottomBlurHeight),
+            })}
+            className={`
+              h-8 w-16 border-black/15 bg-white px-2 text-xs text-black
+            `}
+            aria-label="图片底部模糊渐变高度"
+            title="渐变高度"
+          />
+          <Input
+            type="number"
+            min={0}
+            max={40}
+            value={imageElement.bottomBlurAmount}
+            onChange={event => onUpdate({
+              bottomBlurAmount: clampNumberInput(event.target.value, 0, 40, imageElement.bottomBlurAmount),
+            })}
+            className={`
+              h-8 w-16 border-black/15 bg-white px-2 text-xs text-black
+            `}
+            aria-label="图片底部模糊程度"
+            title="模糊程度"
+          />
           <input
             ref={replacementInputRef}
             type="file"

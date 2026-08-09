@@ -1,7 +1,8 @@
 import type { ChangeEvent } from 'react'
-import type { XhsCoverDocument, XhsCoverElement, XhsCoverTextElement } from '@/lib/xhs/cover-document'
+import type { XhsCoverDocument, XhsCoverElement, XhsCoverTemplateId, XhsCoverTextElement } from '@/lib/xhs/cover-document'
+import type { XhsSavedCoverStyle } from '@/lib/xhs/cover-storage'
 import { ImagePlus, Redo2, Type, Undo2 } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import {
   AlertDialog,
@@ -15,10 +16,19 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { XHS_DEFAULT_TEXT_SHADOW } from '@/lib/xhs/cover-document'
+import {
+  createCoverTemplateDocument,
+  createDefaultCoverDocument,
+  removeCoverElement,
+  updateCoverElement,
+  XHS_DEFAULT_IMAGE_STYLE,
+  XHS_DEFAULT_TEXT_SHADOW,
+} from '@/lib/xhs/cover-document'
 import { commitCoverHistory, createCoverHistory, redoCoverHistory, undoCoverHistory } from '@/lib/xhs/cover-history'
-import { saveCoverDocument } from '@/lib/xhs/cover-storage'
+import { deleteSavedCoverStyle, getSavedCoverStyles, saveCoverDocument, saveSavedCoverStyle } from '@/lib/xhs/cover-storage'
 import { XhsCoverCanvas } from './xhs-cover-canvas'
+import { XhsCoverElementToolbar } from './xhs-cover-element-toolbar'
+import { XhsCoverTemplatePicker } from './xhs-cover-template-picker'
 
 const EDITOR_SCALE = 0.64
 
@@ -26,12 +36,24 @@ interface XhsCoverEditorProps {
   open: boolean
   fileId: string
   document: XhsCoverDocument
+  savedStyleId?: string | null
   onOpenChange: (open: boolean) => void
   onSaved: (document: XhsCoverDocument) => void
 }
 
 function nextZIndex(document: XhsCoverDocument) {
   return Math.max(0, ...document.elements.map(element => element.zIndex)) + 1
+}
+
+function nextSavedStyleName(styles: XhsSavedCoverStyle[]) {
+  const names = new Set(styles.map(style => style.name))
+  let index = 1
+  let name = `我的样式 ${String(index).padStart(2, '0')}`
+  while (names.has(name)) {
+    index += 1
+    name = `我的样式 ${String(index).padStart(2, '0')}`
+  }
+  return name
 }
 
 function readFileAsDataUrl(file: File) {
@@ -56,6 +78,7 @@ export function XhsCoverEditor({
   open,
   fileId,
   document,
+  savedStyleId = null,
   onOpenChange,
   onSaved,
 }: XhsCoverEditorProps) {
@@ -63,13 +86,34 @@ export function XhsCoverEditor({
   const [draftDocument, setDraftDocument] = useState(document)
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [savingCurrentStyle, setSavingCurrentStyle] = useState(false)
+  const [deletingCurrentStyle, setDeletingCurrentStyle] = useState(false)
+  const [savedStyles, setSavedStyles] = useState<XhsSavedCoverStyle[]>([])
+  const [selectedSavedStyleId, setSelectedSavedStyleId] = useState<string | null>(savedStyleId)
   const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false)
   const initialDocumentRef = useRef(document)
+  const draftDocumentRef = useRef(document)
   const imageInputRef = useRef<HTMLInputElement>(null)
 
+  useEffect(() => {
+    let active = true
+    void getSavedCoverStyles().then((styles) => {
+      if (active) {
+        setSavedStyles(styles)
+      }
+    })
+    return () => {
+      active = false
+    }
+  }, [])
+
   const dirty = draftDocument !== initialDocumentRef.current
+  const selectedElement = selectedElementId
+    ? draftDocument.elements.find(element => element.id === selectedElementId) ?? null
+    : null
 
   const commitDocument = (nextDocument: XhsCoverDocument) => {
+    draftDocumentRef.current = nextDocument
     setHistory((current) => {
       const next = commitCoverHistory(current, nextDocument)
       setDraftDocument(next.present)
@@ -82,7 +126,81 @@ export function XhsCoverEditor({
       commitDocument(nextDocument)
     }
     else {
+      draftDocumentRef.current = nextDocument
       setDraftDocument(nextDocument)
+    }
+  }
+
+  const updateSelectedElement = (patch: Partial<XhsCoverElement>) => {
+    if (!selectedElement) {
+      return
+    }
+    commitDocument(updateCoverElement(draftDocument, selectedElement.id, patch))
+  }
+
+  const deleteSelectedElement = () => {
+    if (!selectedElement) {
+      return
+    }
+    commitDocument(removeCoverElement(draftDocument, selectedElement.id))
+    setSelectedElementId(null)
+  }
+
+  const handleTemplateSelect = (templateId: XhsCoverTemplateId) => {
+    commitDocument(createCoverTemplateDocument(templateId, draftDocument))
+    setSelectedSavedStyleId(null)
+    setSelectedElementId(null)
+  }
+
+  const handleSavedStyleSelect = (style: XhsSavedCoverStyle) => {
+    commitDocument(structuredClone(style.document))
+    setSelectedSavedStyleId(style.id)
+    setSelectedElementId(null)
+  }
+
+  const handleRestoreDefault = () => {
+    commitDocument(createDefaultCoverDocument(''))
+    setSelectedSavedStyleId(null)
+    setSelectedElementId(null)
+    toast.success('已恢复初始默认样式')
+  }
+
+  const handleSaveCurrentStyle = async () => {
+    setSavingCurrentStyle(true)
+    try {
+      const savedStyle = await saveSavedCoverStyle(nextSavedStyleName(savedStyles), draftDocumentRef.current)
+      setSavedStyles(styles => [savedStyle, ...styles])
+      setSelectedSavedStyleId(savedStyle.id)
+      toast.success(`已保存为“${savedStyle.name}”`)
+    }
+    catch (error) {
+      const message = error instanceof Error ? error.message : '浏览器存储不可用'
+      toast.error(`样式保存失败：${message}`)
+    }
+    finally {
+      setSavingCurrentStyle(false)
+    }
+  }
+
+  const handleDeleteCurrentStyle = async () => {
+    if (!selectedSavedStyleId) {
+      return
+    }
+
+    const style = savedStyles.find(item => item.id === selectedSavedStyleId)
+    setDeletingCurrentStyle(true)
+    try {
+      await deleteSavedCoverStyle(selectedSavedStyleId)
+      setSavedStyles(styles => styles.filter(item => item.id !== selectedSavedStyleId))
+      setSelectedSavedStyleId(null)
+      toast.success(`已删除“${style?.name ?? '当前样式'}”`)
+    }
+    catch (error) {
+      const message = error instanceof Error ? error.message : '浏览器存储不可用'
+      toast.error(`样式删除失败：${message}`)
+    }
+    finally {
+      setDeletingCurrentStyle(false)
     }
   }
 
@@ -147,6 +265,7 @@ export function XhsCoverEditor({
         src,
         aspectRatio: image.naturalWidth / image.naturalHeight,
         alt: file.name,
+        ...XHS_DEFAULT_IMAGE_STYLE,
       }
       commitDocument({ ...draftDocument, elements: [...draftDocument.elements, element] })
       setSelectedElementId(element.id)
@@ -159,6 +278,7 @@ export function XhsCoverEditor({
   const handleUndo = () => {
     setHistory((current) => {
       const next = undoCoverHistory(current)
+      draftDocumentRef.current = next.present
       setDraftDocument(next.present)
       return next
     })
@@ -167,6 +287,7 @@ export function XhsCoverEditor({
   const handleRedo = () => {
     setHistory((current) => {
       const next = redoCoverHistory(current)
+      draftDocumentRef.current = next.present
       setDraftDocument(next.present)
       return next
     })
@@ -183,9 +304,10 @@ export function XhsCoverEditor({
   const handleSave = async () => {
     setSaving(true)
     try {
-      await saveCoverDocument(fileId, draftDocument)
-      initialDocumentRef.current = draftDocument
-      onSaved(draftDocument)
+      const currentDocument = draftDocumentRef.current
+      await saveCoverDocument(fileId, currentDocument)
+      initialDocumentRef.current = currentDocument
+      onSaved(currentDocument)
       onOpenChange(false)
       toast.success('封面已保存')
     }
@@ -246,24 +368,59 @@ export function XhsCoverEditor({
         </DialogHeader>
 
         <div className={`
-          flex min-h-0 items-center justify-center overflow-auto bg-muted/50 p-8
+          grid min-h-0 grid-cols-1 overflow-hidden
+          sm:grid-cols-[minmax(0,1fr)_280px]
         `}
         >
-          <div
-            className="shrink-0 shadow-lg"
-            style={{ width: 720 * EDITOR_SCALE, height: 960 * EDITOR_SCALE }}
-          >
-            <div style={{ width: 720, height: 960, transform: `scale(${EDITOR_SCALE})`, transformOrigin: 'top left' }}>
-              <XhsCoverCanvas
-                document={draftDocument}
-                editable
-                scale={EDITOR_SCALE}
-                selectedElementId={selectedElementId}
-                onSelectedElementIdChange={setSelectedElementId}
-                onDocumentChange={handleCanvasChange}
-              />
+          <div className="flex min-h-0 flex-col overflow-hidden bg-muted/50">
+            {selectedElement && (
+              <div className={`
+                flex max-h-36 shrink-0 justify-center overflow-auto border-b
+                bg-background/90 p-3
+              `}
+              >
+                <XhsCoverElementToolbar
+                  element={selectedElement}
+                  placement="dock"
+                  onUpdate={updateSelectedElement}
+                  onDelete={deleteSelectedElement}
+                />
+              </div>
+            )}
+            <div className={`
+              flex min-h-0 flex-1 justify-center overflow-auto p-8
+            `}
+            >
+              <div
+                className="my-auto shrink-0 shadow-lg"
+                style={{ width: 720 * EDITOR_SCALE, height: 960 * EDITOR_SCALE }}
+              >
+                <div style={{ width: 720, height: 960, transform: `scale(${EDITOR_SCALE})`, transformOrigin: 'top left' }}>
+                  <XhsCoverCanvas
+                    document={draftDocument}
+                    editable
+                    scale={EDITOR_SCALE}
+                    showElementToolbar={false}
+                    selectedElementId={selectedElementId}
+                    onSelectedElementIdChange={setSelectedElementId}
+                    onDocumentChange={handleCanvasChange}
+                  />
+                </div>
+              </div>
             </div>
           </div>
+          <XhsCoverTemplatePicker
+            document={draftDocument}
+            savedStyles={savedStyles}
+            selectedSavedStyleId={selectedSavedStyleId}
+            onSelectSavedStyle={handleSavedStyleSelect}
+            isSavingCurrentStyle={savingCurrentStyle}
+            isDeletingCurrentStyle={deletingCurrentStyle}
+            onRestoreDefault={handleRestoreDefault}
+            onSaveCurrentStyle={() => void handleSaveCurrentStyle()}
+            onDeleteCurrentStyle={() => void handleDeleteCurrentStyle()}
+            onSelect={handleTemplateSelect}
+          />
         </div>
       </DialogContent>
       <AlertDialog open={discardConfirmOpen} onOpenChange={setDiscardConfirmOpen}>

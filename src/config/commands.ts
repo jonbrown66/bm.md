@@ -138,6 +138,13 @@ export const editorSettingsConfig: readonly EditorSettingItem[] = [
     setterKey: 'setOpenLinksInNewWindow',
   },
   {
+    id: 'imageCaption',
+    label: '显示图片备注',
+    icon: 'Captions',
+    storeKey: 'showImageCaption',
+    setterKey: 'setShowImageCaption',
+  },
+  {
     id: 'scrollSync',
     label: '滚动同步',
     icon: 'RefreshCw',

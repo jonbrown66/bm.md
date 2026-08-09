@@ -16,6 +16,9 @@ export interface EditorState {
   openLinksInNewWindow: boolean
   setOpenLinksInNewWindow: (enable: boolean) => void
 
+  showImageCaption: boolean
+  setShowImageCaption: (show: boolean) => void
+
   enableScrollSync: boolean
   setEnableScrollSync: (enable: boolean) => void
 }
@@ -59,6 +62,9 @@ export const useEditorStore = create<EditorState>()(
         set({ openLinksInNewWindow: enable })
         usePreviewStore.getState().clearRenderedHtmlCache()
       },
+
+      showImageCaption: false,
+      setShowImageCaption: show => set({ showImageCaption: show }),
 
       enableScrollSync: true,
       setEnableScrollSync: enable => set({ enableScrollSync: enable }),
