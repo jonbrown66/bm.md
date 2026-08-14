@@ -262,6 +262,26 @@ describe('xhs cover document', () => {
     expect(result.borderRadius).toBe(180)
   })
 
+  it('keeps rotated images inside the canvas safe area', () => {
+    const result = clampCoverElement({
+      id: 'image-rotated-edge',
+      type: 'image',
+      x: 0,
+      y: 500,
+      width: 720,
+      height: 460,
+      zIndex: 1,
+      src: 'data:image/png;base64,abc',
+      aspectRatio: 720 / 460,
+      alt: '',
+      ...XHS_DEFAULT_IMAGE_STYLE,
+      rotationY: 24,
+    })
+
+    expect(result.x).toBeCloseTo(32.78, 1)
+    expect(result.y).toBeCloseTo(455.31, 1)
+  })
+
   it('allows images to extend beyond the canvas edges', () => {
     const result = clampCoverElement({
       id: 'image-outside',

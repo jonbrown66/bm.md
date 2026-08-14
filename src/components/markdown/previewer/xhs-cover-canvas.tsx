@@ -2,6 +2,7 @@ import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react'
 import type { XhsCoverDocument, XhsCoverElement, XhsCoverImageElement, XhsCoverTextElement } from '@/lib/xhs/cover-document'
 import { useRef, useState } from 'react'
 import { clampCoverElement, removeCoverElement, updateCoverElement } from '@/lib/xhs/cover-document'
+import { XHS_IMAGE_PERSPECTIVE } from '@/lib/xhs/cover-transform'
 import { XhsCoverElementToolbar } from './xhs-cover-element-toolbar'
 
 type ResizeCorner = 'nw' | 'ne' | 'sw' | 'se'
@@ -114,7 +115,7 @@ function getImageRotationTransform(element: XhsCoverImageElement) {
     return 'none'
   }
 
-  return `perspective(900px) rotateX(${element.rotationX}deg) rotateY(${element.rotationY}deg) rotateZ(${element.rotationZ}deg)`
+  return `perspective(${XHS_IMAGE_PERSPECTIVE}px) rotateX(${element.rotationX}deg) rotateY(${element.rotationY}deg) rotateZ(${element.rotationZ}deg)`
 }
 
 function getImageFrameStyle(element: XhsCoverImageElement): CSSProperties {

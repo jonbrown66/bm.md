@@ -16,6 +16,7 @@ import {
   XHS_DEFAULT_IMAGE_STYLE,
   XHS_DEFAULT_TEXT_SHADOW,
 } from '@/lib/xhs/cover-document-types'
+import { getCoverImageTransformOffset } from '@/lib/xhs/cover-transform'
 
 export {
   XHS_COVER_HEIGHT,
@@ -256,12 +257,27 @@ export function clampCoverElement<T extends XhsCoverElement>(element: T): T {
       height = width / element.aspectRatio
     }
 
-    return {
+    const x = Math.min(Math.max(-width, element.x), XHS_COVER_WIDTH)
+    const y = Math.min(Math.max(-height, element.y), XHS_COVER_HEIGHT)
+    const nextElement: XhsCoverImageElement = {
       ...element,
       width,
       height,
-      x: Math.min(Math.max(-width, element.x), XHS_COVER_WIDTH),
-      y: Math.min(Math.max(-height, element.y), XHS_COVER_HEIGHT),
+      x,
+      y,
+    }
+    const transformOffset = getCoverImageTransformOffset(
+      nextElement,
+      XHS_COVER_WIDTH,
+      XHS_COVER_HEIGHT,
+    )
+
+    return {
+      ...nextElement,
+      width,
+      height,
+      x: Math.min(Math.max(-width, x + transformOffset.x), XHS_COVER_WIDTH),
+      y: Math.min(Math.max(-height, y + transformOffset.y), XHS_COVER_HEIGHT),
       borderRadius: Math.min(Math.min(width, height) / 2, Math.max(0, element.borderRadius)),
     } as T
   }
