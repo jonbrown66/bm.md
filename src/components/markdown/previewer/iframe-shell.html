@@ -20,6 +20,19 @@
         min-height: 100dvh;
       }
 
+      /* Mermaid 直接融入文档纸面，保留留白而不额外套卡片。 */
+      #bm-md .mermaid {
+        max-width: 100%;
+        margin: 1.5em 0;
+      }
+
+      #bm-md .mermaid > svg {
+        display: block;
+        max-width: 100%;
+        height: auto;
+        margin: 0 auto;
+      }
+
       body[data-show-image-caption='false'] #bm-md figcaption {
         display: none !important;
       }
