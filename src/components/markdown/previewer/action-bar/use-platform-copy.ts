@@ -62,6 +62,7 @@ export function usePlatformCopy(platform: Platform): PlatformCopyResult {
   const customCss = usePreviewStore(state => state.customCss)
   const enableFootnoteLinks = useEditorStore(state => state.enableFootnoteLinks)
   const openLinksInNewWindow = useEditorStore(state => state.openLinksInNewWindow)
+  const showImageCaption = useEditorStore(state => state.showImageCaption)
   const setRenderedHtml = usePreviewStore(state => state.setRenderedHtml)
 
   const getHtml = useCallback(async (): Promise<string> => {
@@ -77,6 +78,7 @@ export function usePlatformCopy(platform: Platform): PlatformCopyResult {
         customCss,
         enableFootnoteLinks,
         openLinksInNewWindow,
+        showImageCaption,
         platform,
         ...getMarkdownLocaleTexts(),
       })
@@ -179,7 +181,7 @@ export function usePlatformCopy(platform: Platform): PlatformCopyResult {
     finally {
       setIsLoading(false)
     }
-  }, [content, markdownStyle, codeTheme, customCss, enableFootnoteLinks, openLinksInNewWindow, platform, setRenderedHtml]) // Removed getRenderedHtml dependency to force fresh render
+  }, [content, markdownStyle, codeTheme, customCss, enableFootnoteLinks, openLinksInNewWindow, showImageCaption, platform, setRenderedHtml]) // Removed getRenderedHtml dependency to force fresh render
 
   return { getHtml, isLoading, error }
 }

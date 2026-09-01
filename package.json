@@ -3,17 +3,17 @@
   "type": "module",
   "version": "0.1.0",
   "private": true,
-  "packageManager": "bun@1.2.1",
+  "packageManager": "pnpm@10.15.1",
   "scripts": {
-    "dev": "bunx vite dev --port 2663",
-    "build": "bun run openapi:generate && bunx vite build",
-    "openapi:generate": "bun run scripts/generate-openapi.ts",
-    "preview": "bunx vite preview",
-    "test": "bunx vitest run",
-    "lint": "bunx eslint",
-    "lint:fix": "bunx eslint --fix",
-    "shadcn": "bunx shadcn",
-    "prepare": "bunx simple-git-hooks"
+    "dev": "vite dev --port 2663",
+    "build": "tsx scripts/generate-openapi.ts && vite build",
+    "openapi:generate": "tsx scripts/generate-openapi.ts",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "lint": "eslint",
+    "lint:fix": "eslint --fix",
+    "shadcn": "shadcn",
+    "prepare": "simple-git-hooks"
   },
   "dependencies": {
     "mermaid": "^11.12.2"
@@ -28,7 +28,7 @@
     "@codemirror/language-data": "^6.5.2",
     "@codemirror/state": "^6.5.3",
     "@codemirror/view": "^6.39.9",
-    "@eslint-react/eslint-plugin": "^2.5.7",
+    "@eslint-react/eslint-plugin": "^2.7.2",
     "@lezer/highlight": "^1.2.3",
     "@modelcontextprotocol/sdk": "^1.25.2",
     "@orpc/client": "^1.13.2",
@@ -146,7 +146,7 @@
     "@codemirror/view": "^6.39.9"
   },
   "simple-git-hooks": {
-    "pre-commit": "bunx lint-staged"
+    "pre-commit": "pnpm exec lint-staged"
   },
   "lint-staged": {
     "*": "eslint --fix"

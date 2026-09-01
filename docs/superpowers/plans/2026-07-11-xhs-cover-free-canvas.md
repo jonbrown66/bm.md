@@ -73,7 +73,7 @@ describe('xhs cover document', () => {
 
 - [ ] **Step 2: Run the focused test and verify it fails**
 
-Run: `bun run test src/lib/xhs/cover-document.test.ts`
+Run: `pnpm test src/lib/xhs/cover-document.test.ts`
 
 Expected: FAIL because `cover-document.ts` does not exist.
 
@@ -85,7 +85,7 @@ Default title comes from the first H1, then H2, then `未命名文章`; subtitle
 
 - [ ] **Step 4: Run the focused test**
 
-Run: `bun run test src/lib/xhs/cover-document.test.ts`
+Run: `pnpm test src/lib/xhs/cover-document.test.ts`
 
 Expected: PASS.
 
@@ -115,7 +115,7 @@ describe('xhs cover history', () => {
 
 - [ ] **Step 2: Run the test and verify failure**
 
-Run: `bun run test src/lib/xhs/cover-history.test.ts`
+Run: `pnpm test src/lib/xhs/cover-history.test.ts`
 
 Expected: FAIL because the module does not exist.
 
@@ -125,7 +125,7 @@ Expose `CoverHistory`, `createCoverHistory`, `commitCoverHistory`, `undoCoverHis
 
 - [ ] **Step 4: Run focused tests**
 
-Run: `bun run test src/lib/xhs/cover-history.test.ts`
+Run: `pnpm test src/lib/xhs/cover-history.test.ts`
 
 Expected: PASS.
 
@@ -142,7 +142,7 @@ Test that `saveCoverDocument('article-1', document)` and `getCoverDocument('arti
 
 - [ ] **Step 2: Run the test and verify failure**
 
-Run: `bun run test src/lib/xhs/cover-storage.test.ts`
+Run: `pnpm test src/lib/xhs/cover-storage.test.ts`
 
 Expected: FAIL because storage functions do not exist.
 
@@ -152,7 +152,7 @@ Use database name `bm.md.xhs-covers`, version `1`, object store `covers`, and re
 
 - [ ] **Step 4: Run focused tests**
 
-Run: `bun run test src/lib/xhs/cover-storage.test.ts`
+Run: `pnpm test src/lib/xhs/cover-storage.test.ts`
 
 Expected: PASS.
 
@@ -240,19 +240,19 @@ In `deleteFile`, call `deleteCoverDocument(id)` alongside `deleteFileContent(id)
 
 - [ ] **Step 1: Run focused cover tests**
 
-Run: `bun run test src/lib/xhs/cover-document.test.ts src/lib/xhs/cover-history.test.ts src/lib/xhs/cover-storage.test.ts`
+Run: `pnpm test src/lib/xhs/cover-document.test.ts src/lib/xhs/cover-history.test.ts src/lib/xhs/cover-storage.test.ts`
 
 Expected: all tests pass.
 
 - [ ] **Step 2: Run TypeScript**
 
-Run: `bunx tsc --noEmit`
+Run: `pnpm exec tsc --noEmit`
 
 Expected: exit code 0.
 
 - [ ] **Step 3: Run targeted lint**
 
-Run: `bun run lint src/lib/xhs/cover-document.ts src/lib/xhs/cover-history.ts src/lib/xhs/cover-storage.ts src/components/markdown/previewer/xhs-cover-canvas.tsx src/components/markdown/previewer/xhs-cover-element-toolbar.tsx src/components/markdown/previewer/xhs-cover-editor.tsx src/components/markdown/previewer/xhs-preview.tsx src/stores/files.ts`
+Run: `pnpm lint src/lib/xhs/cover-document.ts src/lib/xhs/cover-history.ts src/lib/xhs/cover-storage.ts src/components/markdown/previewer/xhs-cover-canvas.tsx src/components/markdown/previewer/xhs-cover-element-toolbar.tsx src/components/markdown/previewer/xhs-cover-editor.tsx src/components/markdown/previewer/xhs-preview.tsx src/stores/files.ts`
 
 Expected: no errors. Existing unrelated warnings in `xhs-preview.tsx` may remain documented.
 

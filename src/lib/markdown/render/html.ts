@@ -27,6 +27,7 @@ export interface RenderOptions {
   customCss?: string
   enableFootnoteLinks?: boolean
   openLinksInNewWindow?: boolean
+  showImageCaption?: boolean
   platform?: Platform
   footnoteLabel?: string
   referenceTitle?: string
@@ -35,6 +36,7 @@ export interface RenderOptions {
 interface ProcessorOptions {
   enableFootnoteLinks?: boolean
   openLinksInNewWindow?: boolean
+  showImageCaption?: boolean
   platform?: Platform
   footnoteLabel?: string
   referenceTitle?: string
@@ -83,7 +85,7 @@ const darkCodeThemeIds = new Set([
   'tokyo-night-dark',
 ])
 
-function createProcessor({ enableFootnoteLinks, openLinksInNewWindow, platform = 'html', footnoteLabel = 'Footnotes', referenceTitle = 'References' }: ProcessorOptions) {
+function createProcessor({ enableFootnoteLinks, openLinksInNewWindow, showImageCaption = true, platform = 'html', footnoteLabel = 'Footnotes', referenceTitle = 'References' }: ProcessorOptions) {
   const processor = unified()
     .use(remarkParse)
     .use(remarkGfm)
@@ -111,7 +113,7 @@ function createProcessor({ enableFootnoteLinks, openLinksInNewWindow, platform =
     .use(rehypeKatex)
     .use(rehypeHighlight)
     .use(rehypeMarkHighlight)
-    .use(rehypeFigureWrapper)
+    .use(rehypeFigureWrapper, { showImageCaption })
 
   if (enableFootnoteLinks && platform !== 'wechat') {
     processor.use(rehypeFootnoteLinks, { referenceTitle })
@@ -151,12 +153,20 @@ export async function render(options: RenderOptions): Promise<string> {
     customCss = '',
     enableFootnoteLinks = true,
     openLinksInNewWindow = true,
+    showImageCaption = true,
     platform = 'html',
     footnoteLabel = 'Footnotes',
     referenceTitle = 'References',
   } = options
 
-  const processor = createProcessor({ enableFootnoteLinks, openLinksInNewWindow, platform, footnoteLabel, referenceTitle })
+  const processor = createProcessor({
+    enableFootnoteLinks,
+    openLinksInNewWindow,
+    showImageCaption,
+    platform,
+    footnoteLabel,
+    referenceTitle,
+  })
   const html = (await processor.process(markdown)).toString()
 
   const hasKatex = html.includes('class="katex"')

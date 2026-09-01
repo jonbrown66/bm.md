@@ -48,11 +48,6 @@ const config = defineConfig({
                 keep_vars: true,
               },
             },
-            vercel: {
-              functions: {
-                runtime: 'bun1.x',
-              },
-            },
           })]
         : []),
     // this is the plugin that enables path aliases

@@ -19,6 +19,7 @@
 ### Task 1: 建立图片缩放决策边界
 
 **Files:**
+
 - Modify: `src/lib/xhs/pagination.ts`
 - Test: `src/lib/xhs/pagination.test.ts`
 
@@ -62,7 +63,7 @@ describe('getMediaFitScale', () => {
 
 - [ ] **Step 2: 运行测试并确认失败**
 
-Run: `bun run test src/lib/xhs/pagination.test.ts`
+Run: `pnpm test src/lib/xhs/pagination.test.ts`
 
 Expected: FAIL，提示 `getMediaFitScale` 尚未导出。
 
@@ -104,13 +105,14 @@ export function getMediaFitScale({
 
 - [ ] **Step 4: 运行相关测试并确认通过**
 
-Run: `bun run test src/lib/xhs/pagination.test.ts`
+Run: `pnpm test src/lib/xhs/pagination.test.ts`
 
 Expected: PASS，分页原有用例和三个媒体缩放用例全部通过。
 
 ### Task 2: 将有限缩放接入正文分页
 
 **Files:**
+
 - Modify: `src/components/markdown/previewer/xhs-preview.tsx`
 - Modify: `src/lib/xhs/pagination.test.ts`
 
@@ -199,42 +201,43 @@ if (currentHtml.length > 0 && !fitsPage(probe, candidateHtml)) {
 
 - [ ] **Step 4: 运行定向验证**
 
-Run: `bun run test src/lib/xhs/pagination.test.ts`
+Run: `pnpm test src/lib/xhs/pagination.test.ts`
 
 Expected: PASS。
 
-Run: `bunx tsc --noEmit`
+Run: `pnpm exec tsc --noEmit`
 
 Expected: exit code 0。
 
 ### Task 3: 完整验证与人工检查
 
 **Files:**
+
 - Verify: `src/components/markdown/previewer/xhs-preview.tsx`
 - Verify: `src/lib/xhs/pagination.ts`
 - Verify: `src/lib/xhs/pagination.test.ts`
 
 - [ ] **Step 1: 运行 lint**
 
-Run: `bun run lint:fix`
+Run: `pnpm lint:fix`
 
 Expected: exit code 0；检查 `git diff`，确认没有格式化无关文件。
 
 - [ ] **Step 2: 运行完整测试**
 
-Run: `bun run test`
+Run: `pnpm test`
 
 Expected: 所有 Vitest 测试通过。
 
 - [ ] **Step 3: 运行生产构建**
 
-Run: `bun run build`
+Run: `pnpm build`
 
 Expected: 构建成功；若仅由构建重写 `public/api/openapi.json`，恢复该生成噪音，不触碰用户已有改动。
 
 - [ ] **Step 4: 浏览器检查两个边界样例**
 
-启动 `bun run dev`，在小红书预览中检查：
+启动 `pnpm dev`，在小红书预览中检查：
 
 1. 图片只超出当前页少量：图片完整留在本页，宽度不低于原显示宽度的 85%，底部无裁切。
 2. 图片需要缩小超过 15%：图片保持正常尺寸并整体进入下一页。

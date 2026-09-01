@@ -20,6 +20,7 @@ export const renderDefinition = {
     customCss: z.string().max(50000, '自定义 CSS 不能超过 50000 字符').optional().default('').describe('自定义 CSS 样式，在主题样式之后应用。选择器需约束在 #bm-md 下，例如：#bm-md h1 { color: red; }'),
     enableFootnoteLinks: z.boolean().optional().default(true).describe('是否将文中链接自动转换为脚注形式，便于阅读时查看原始链接'),
     openLinksInNewWindow: z.boolean().optional().default(true).describe('是否为所有外部链接添加 target="_blank"，在新窗口打开'),
+    showImageCaption: z.boolean().optional().default(true).describe('是否显示图片说明文字'),
     platform: platformSchema.optional().default('html').describe('目标发布平台，会针对平台特性进行适配优化。可选值: html（通用网页）, wechat（微信公众号）, zhihu（知乎专栏）, juejin（掘金）'),
     footnoteLabel: z.string().max(50).optional().default('Footnotes').describe('GFM 脚注区域标题'),
     referenceTitle: z.string().max(50).optional().default('References').describe('外部链接参考区域标题'),

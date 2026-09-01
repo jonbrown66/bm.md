@@ -30,6 +30,10 @@ function createFigure(className: string, children: Element['children']): Element
   }
 }
 
+interface FigureWrapperOptions {
+  showImageCaption?: boolean
+}
+
 function createFigcaption(text: string): Element {
   return {
     type: 'element',
@@ -39,7 +43,9 @@ function createFigcaption(text: string): Element {
   }
 }
 
-const rehypeFigureWrapper: Plugin<[], Root> = () => {
+const rehypeFigureWrapper: Plugin<[FigureWrapperOptions?], Root> = (options = {}) => {
+  const showImageCaption = options.showImageCaption ?? true
+
   return (tree) => {
     visit(tree, 'element', (node: Element, index, parent) => {
       if (!parent || typeof index !== 'number')
@@ -51,7 +57,7 @@ const rehypeFigureWrapper: Plugin<[], Root> = () => {
           return
 
         const alt = getImgAlt(node)
-        const figureChildren: Element['children'] = alt ? [node, createFigcaption(alt)] : [node]
+        const figureChildren: Element['children'] = alt && showImageCaption ? [node, createFigcaption(alt)] : [node]
         parent.children.splice(index, 1, createFigure('figure-image', figureChildren))
         return SKIP
       }
@@ -65,7 +71,7 @@ const rehypeFigureWrapper: Plugin<[], Root> = () => {
           return
 
         const alt = String(node.properties?.alt || '').trim()
-        const figureChildren: Element['children'] = alt ? [node, createFigcaption(alt)] : [node]
+        const figureChildren: Element['children'] = alt && showImageCaption ? [node, createFigcaption(alt)] : [node]
         parent.children.splice(index, 1, createFigure('figure-image', figureChildren))
         return SKIP
       }
@@ -73,7 +79,7 @@ const rehypeFigureWrapper: Plugin<[], Root> = () => {
       if (node.tagName === 'table') {
         if (parentEl.tagName === 'figure')
           return
-        const classNames = node.properties?.className
+        const classNames: unknown = node.properties?.className
         const classList = Array.isArray(classNames) ? classNames : typeof classNames === 'string' ? classNames.split(/\s+/) : []
         if (classList.includes('frontmatter-table'))
           return
