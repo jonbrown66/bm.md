@@ -13,6 +13,9 @@ const lineNumbersTheme = EditorView.theme({
   '.cm-lineNumbers': {
     minWidth: '2em',
   },
+  '.cm-scroller': {
+    scrollbarGutter: 'stable',
+  },
 })
 
 export default function CodeMirrorEditor() {

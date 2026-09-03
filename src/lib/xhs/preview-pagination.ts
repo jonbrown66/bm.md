@@ -37,17 +37,30 @@ function createArticleProbe() {
   return probe
 }
 
-function getArticleHeight(probe: HTMLElement, html: string) {
+function getArticleHeight(probe: HTMLElement, html: string, cache?: Map<string, number>) {
+  if (cache) {
+    const cached = cache.get(html)
+    if (cached !== undefined) {
+      return cached
+    }
+  }
+
   probe.innerHTML = `<div id="bm-md" style="background: transparent; padding: 0; margin: 0; width: 100%; min-height: auto;">${html}</div>`
 
-  return Math.ceil(Math.max(
+  const height = Math.ceil(Math.max(
     probe.scrollHeight,
     probe.getBoundingClientRect().height,
   ))
+
+  if (cache) {
+    cache.set(html, height)
+  }
+
+  return height
 }
 
-function fitsPage(probe: HTMLElement, html: string) {
-  return getArticleHeight(probe, html) <= XHS_USABLE_PAGE_HEIGHT + XHS_PAGE_HEIGHT_TOLERANCE
+function fitsPage(probe: HTMLElement, html: string, cache?: Map<string, number>) {
+  return getArticleHeight(probe, html, cache) <= XHS_USABLE_PAGE_HEIGHT
 }
 
 function getSingleImage(element: HTMLElement) {
@@ -579,7 +592,7 @@ function normalizeOverflowPages(pages: XhsRenderedPage[], probe: HTMLElement) {
 
   for (let index = 0; index < pages.length; index++) {
     while (
-      getArticleHeight(probe, pages[index]?.html ?? '') > XHS_USABLE_PAGE_HEIGHT + XHS_PAGE_HEIGHT_TOLERANCE
+      getArticleHeight(probe, pages[index]?.html ?? '') > XHS_USABLE_PAGE_HEIGHT
       && iteration < maxIterations
     ) {
       iteration += 1
@@ -707,7 +720,7 @@ export function buildSemanticPages(
 
     const takeTrailingHeading = () => {
       const trailingHtml = currentHtml.at(-1)
-      if (trailingHtml && isHeadingHtml(trailingHtml)) {
+      if (trailingHtml && isHeadingHtml(trailingHtml) && currentHtml.length > 1) {
         currentHtml.pop()
         flush()
 
@@ -793,6 +806,9 @@ export function buildSemanticPages(
       mergeImageOnlyPages(pages, probe)
       normalizePageList(pages, probe)
     }
+    pages.forEach((page, index) => {
+      page.id = `xhs-card-${index}`
+    })
 
     return pages
   }

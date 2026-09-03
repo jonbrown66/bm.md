@@ -38,11 +38,11 @@ function App() {
       `}
     >
       <ResizablePanelGroup tagName="main" className="flex-1" direction="horizontal">
-        <ResizablePanel defaultSize={50} style={{ minWidth: 512 }}>
+        <ResizablePanel defaultSize={50} minSize={30} className="min-w-0">
           <MarkdownEditor></MarkdownEditor>
         </ResizablePanel>
         <ResizableHandle />
-        <ResizablePanel defaultSize={50} style={{ minWidth: 512 }}>
+        <ResizablePanel defaultSize={50} minSize={30} className="min-w-0">
           <MarkdownPreviewer></MarkdownPreviewer>
         </ResizablePanel>
       </ResizablePanelGroup>

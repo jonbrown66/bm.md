@@ -3,7 +3,7 @@
   "type": "module",
   "version": "0.1.0",
   "private": true,
-  "packageManager": "pnpm@10.15.1",
+  "packageManager": "pnpm@12.3.1",
   "scripts": {
     "dev": "vite dev --port 2663",
     "build": "tsx scripts/generate-openapi.ts && vite build",

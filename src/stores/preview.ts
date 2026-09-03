@@ -123,9 +123,15 @@ export const usePreviewStore = create<PreviewState>()(
       setXhsShowFooter: xhsShowFooter => set({ xhsShowFooter }),
 
       renderedHtmlMap: {},
-      setRenderedHtml: (platform, html) => set(state => ({
-        renderedHtmlMap: { ...state.renderedHtmlMap, [platform]: html },
-      })),
+      setRenderedHtml: (platform, html) => set((state) => {
+        if (state.renderedHtmlMap[platform] === html) {
+          return state
+        }
+
+        return {
+          renderedHtmlMap: { ...state.renderedHtmlMap, [platform]: html },
+        }
+      }),
       getRenderedHtml: platform => get().renderedHtmlMap[platform] ?? '',
       clearRenderedHtmlCache: () => set({ renderedHtmlMap: {} }),
     }),

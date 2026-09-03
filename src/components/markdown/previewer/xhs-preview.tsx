@@ -3,7 +3,7 @@ import type { XhsRenderedPage } from '@/lib/xhs/preview-pagination'
 import { Slider as SliderPrimitive } from '@base-ui/react/slider'
 import { debounce } from 'es-toolkit'
 import { Download, Pencil, RotateCcw, SlidersHorizontal } from 'lucide-react'
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -28,13 +28,7 @@ import {
   XHS_PREVIEW_SCALE,
   XHS_PREVIEW_WIDTH,
 } from '@/lib/xhs/preview-layout'
-import {
-  buildSemanticPages,
-  fitLastImageBlockOnRenderedPage,
-  getOverflowingExportPageIndex,
-  moveLastElementToNextPage,
-
-} from '@/lib/xhs/preview-pagination'
+import { buildSemanticPages } from '@/lib/xhs/preview-pagination'
 import { getXhsArticleCss, getXhsPageBackground } from '@/lib/xhs/preview-style'
 
 import { getXhsFontOption, XHS_FONT_OPTIONS } from '@/lib/xhs/typography'
@@ -44,8 +38,23 @@ import { usePreviewStore } from '@/stores/preview'
 import { XhsCoverEditor } from './xhs-cover-editor'
 import { XhsPage } from './xhs-page'
 
-const XHS_RENDER_DEBOUNCE_MS = 250
+const XHS_CONTENT_DEBOUNCE_MS = 500
+const XHS_RENDER_DEBOUNCE_MS = 100
 const XHS_AUTHOR_PRESETS = ['AI首席情报员-阿布', '开源小聪明'] as const
+
+function useDebouncedContent(content: string) {
+  const [debouncedContent, setDebouncedContent] = useState(content)
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedContent(content)
+    }, XHS_CONTENT_DEBOUNCE_MS)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [content])
+
+  return debouncedContent
+}
 
 function XhsSlider({
   value,
@@ -106,10 +115,13 @@ function XhsSlider({
   )
 }
 
-export function XhsPreview() {
-  const content = useFilesStore(state => state.currentContent)
-  const activeFileId = useFilesStore(state => state.activeFileId)
-  const deferredContent = useDeferredValue(content)
+const XhsPreviewContent = memo(({
+  activeFileId,
+  content,
+}: {
+  activeFileId: string | null
+  content: string
+}) => {
   const enableFootnoteLinks = useEditorStore(state => state.enableFootnoteLinks)
   const openLinksInNewWindow = useEditorStore(state => state.openLinksInNewWindow)
   const markdownStyle = usePreviewStore(state => state.markdownStyle)
@@ -134,7 +146,6 @@ export function XhsPreview() {
 
   const measureRef = useRef<HTMLDivElement>(null)
   const exportPagesRef = useRef<HTMLDivElement>(null)
-  const overflowFixCountRef = useRef(0)
   const renderSeqRef = useRef(0)
   const prepareSeqRef = useRef(0)
   const paginationSeqRef = useRef(0)
@@ -146,35 +157,32 @@ export function XhsPreview() {
   const [isPreparing, setIsPreparing] = useState(false)
   const [coverDocument, setCoverDocument] = useState<XhsCoverDocument>(() => createDefaultCoverDocument(content))
   const [coverEditorOpen, setCoverEditorOpen] = useState(false)
-  const [hasCustomCover, setHasCustomCover] = useState(false)
   const [coverStyleId, setCoverStyleId] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!activeFileId) {
-      setCoverDocument(createDefaultCoverDocument(''))
-      setHasCustomCover(false)
-      setCoverStyleId(null)
-      return
-    }
-
     let active = true
     const load = async () => {
+      if (!activeFileId) {
+        if (active) {
+          setCoverDocument(createDefaultCoverDocument(''))
+          setCoverStyleId(null)
+        }
+        return
+      }
+
       const stored = await getCoverDocument(activeFileId)
       const savedStyle = stored ? null : await getLatestSavedCoverStyle()
       if (active) {
         if (stored) {
           setCoverDocument(stored)
-          setHasCustomCover(true)
           setCoverStyleId(null)
         }
         else if (savedStyle) {
           setCoverDocument(savedStyle.document)
-          setHasCustomCover(true)
           setCoverStyleId(savedStyle.id)
         }
         else {
-          setCoverDocument(createDefaultCoverDocument(content))
-          setHasCustomCover(false)
+          setCoverDocument(createDefaultCoverDocument(''))
           setCoverStyleId(null)
         }
       }
@@ -185,21 +193,14 @@ export function XhsPreview() {
     }
   }, [activeFileId])
 
-  useEffect(() => {
-    if (!hasCustomCover) {
-      setCoverDocument(createDefaultCoverDocument(content))
-    }
-  }, [content, hasCustomCover])
-
   const handleCoverSaved = (doc: XhsCoverDocument) => {
     setCoverDocument(doc)
-    setHasCustomCover(true)
     setCoverStyleId(null)
   }
 
   const scheduleRender = useMemo(
     () => debounce(async (
-      seq: number,
+      isCurrent: () => boolean,
       nextContent: string,
       styleId: string,
       themeId: string,
@@ -220,18 +221,18 @@ export function XhsPreview() {
           ...getMarkdownLocaleTexts(),
         })
 
-        if (seq === renderSeqRef.current) {
+        if (isCurrent()) {
           setRenderedHtml('html', result.result)
         }
       }
       catch (error) {
-        if (seq === renderSeqRef.current) {
+        if (isCurrent()) {
           const message = error instanceof Error ? error.message : '转换失败'
           setRenderedHtml('html', message)
         }
       }
       finally {
-        if (seq === renderSeqRef.current) {
+        if (isCurrent()) {
           setIsRendering(false)
         }
       }
@@ -242,24 +243,35 @@ export function XhsPreview() {
   useEffect(() => {
     const seq = renderSeqRef.current + 1
     renderSeqRef.current = seq
-    scheduleRender(seq, deferredContent, markdownStyle, codeTheme, customCss, enableFootnoteLinks, openLinksInNewWindow)
+    scheduleRender(
+      () => seq === renderSeqRef.current,
+      content,
+      markdownStyle,
+      codeTheme,
+      customCss,
+      enableFootnoteLinks,
+      openLinksInNewWindow,
+    )
 
     return () => {
       scheduleRender.cancel()
     }
-  }, [deferredContent, markdownStyle, codeTheme, customCss, enableFootnoteLinks, openLinksInNewWindow, scheduleRender])
+  }, [content, markdownStyle, codeTheme, customCss, enableFootnoteLinks, openLinksInNewWindow, scheduleRender])
 
   useEffect(() => {
     const seq = prepareSeqRef.current + 1
     prepareSeqRef.current = seq
     const abortController = new AbortController()
-    if (!renderedHtml) {
-      setPreparedHtml('')
-      setIsPreparing(false)
-      return
-    }
 
     const prepare = async () => {
+      if (!renderedHtml) {
+        if (seq === prepareSeqRef.current) {
+          setPreparedHtml('')
+          setIsPreparing(false)
+        }
+        return
+      }
+
       setIsPreparing(true)
       try {
         const temp = document.createElement('div')
@@ -359,6 +371,11 @@ export function XhsPreview() {
     }
   }, [preparedHtml, xhsPaginationMode])
 
+  const calculatePagesRef = useRef(calculatePages)
+  useEffect(() => {
+    calculatePagesRef.current = calculatePages
+  })
+
   useEffect(() => {
     const fontCssHref = getXhsFontOption(xhsFontFamily).fontCssHref
 
@@ -374,7 +391,7 @@ export function XhsPreview() {
       await document.fonts.ready
 
       if (!cancelled) {
-        void calculatePages()
+        void calculatePagesRef.current()
       }
     }
 
@@ -404,7 +421,7 @@ export function XhsPreview() {
       stylesheet.removeEventListener('load', handleStylesheetLoad)
       stylesheet.removeEventListener('error', handleStylesheetError)
     }
-  }, [calculatePages, xhsFontFamily])
+  }, [xhsFontFamily])
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -413,59 +430,6 @@ export function XhsPreview() {
 
     return () => window.cancelAnimationFrame(frame)
   }, [calculatePages, xhsFontSize, xhsLineHeight, xhsPadding, xhsFontFamily])
-
-  useEffect(() => {
-    overflowFixCountRef.current = 0
-  }, [preparedHtml, xhsPaginationMode, xhsFontSize, xhsLineHeight, xhsPadding, xhsFontFamily])
-
-  useEffect(() => {
-    if (renderedPages.length === 0) {
-      return
-    }
-
-    const frame = window.requestAnimationFrame(() => {
-      const exportPages = exportPagesRef.current
-      if (!exportPages) {
-        return
-      }
-
-      const overflowingExportPageIndex = getOverflowingExportPageIndex(exportPages)
-      const overflowIndex = overflowingExportPageIndex - 1
-      if (overflowIndex < 0) {
-        return
-      }
-
-      const renderedExportPage = exportPages.querySelectorAll<HTMLElement>(
-        '[data-xhs-export-page="true"]',
-      )[overflowingExportPageIndex]
-
-      if (overflowFixCountRef.current > renderedPages.length * 8 + 24) {
-        console.warn('XHS pagination overflow could not be fully resolved')
-        return
-      }
-
-      setRenderedPages((previousPages) => {
-        const nextPages = previousPages.map(page => ({ ...page }))
-        const overflowingPage = nextPages[overflowIndex]
-        if (overflowingPage
-          && renderedExportPage
-          && fitLastImageBlockOnRenderedPage(overflowingPage, renderedExportPage)) {
-          overflowFixCountRef.current += 1
-          return nextPages
-        }
-
-        const moved = moveLastElementToNextPage(nextPages, overflowIndex)
-        if (!moved) {
-          return previousPages
-        }
-
-        overflowFixCountRef.current += 1
-        return nextPages
-      })
-    })
-
-    return () => window.cancelAnimationFrame(frame)
-  }, [renderedPages])
 
   const pageCountText = useMemo(() => {
     if (isRendering || isPreparing) {
@@ -710,7 +674,13 @@ export function XhsPreview() {
         </Button>
       </div>
 
-      <div className="relative flex-1 overflow-auto bg-editor px-6 py-8">
+      <div
+        className={`
+          relative flex-1
+          [scrollbar-gutter:stable]
+          overflow-auto bg-editor px-6 py-8
+        `}
+      >
         <div
           ref={measureRef}
           className={`
@@ -818,7 +788,7 @@ export function XhsPreview() {
             </div>
             {renderedPages.map((page, index) => (
               <div
-                key={`preview-${page.id}`}
+                key={page.id}
                 className={`
                   group relative flex w-fit flex-col items-center gap-3
                 `}
@@ -890,4 +860,12 @@ export function XhsPreview() {
       )}
     </div>
   )
+})
+
+export function XhsPreview() {
+  const content = useFilesStore(state => state.currentContent)
+  const activeFileId = useFilesStore(state => state.activeFileId)
+  const debouncedContent = useDebouncedContent(content)
+
+  return <XhsPreviewContent activeFileId={activeFileId} content={debouncedContent} />
 }

@@ -61,4 +61,19 @@ describe('preview store', () => {
     expect(usePreviewStore.getState().xhsAuthorName).toBe('宝玉')
     expect(usePreviewStore.getState().xhsShowFooter).toBe(false)
   })
+
+  it('does not notify subscribers when rendered HTML is unchanged', () => {
+    let updates = 0
+    const unsubscribe = usePreviewStore.subscribe((state, previousState) => {
+      if (state.renderedHtmlMap !== previousState.renderedHtmlMap) {
+        updates += 1
+      }
+    })
+
+    usePreviewStore.getState().setRenderedHtml('html', '<p>内容</p>')
+    usePreviewStore.getState().setRenderedHtml('html', '<p>内容</p>')
+    unsubscribe()
+
+    expect(updates).toBe(1)
+  })
 })

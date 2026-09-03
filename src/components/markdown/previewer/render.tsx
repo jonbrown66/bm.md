@@ -14,7 +14,7 @@ import { PREVIEW_WIDTH_MOBILE, usePreviewStore } from '@/stores/preview'
 
 import iframeShell from './iframe-shell.html?raw'
 
-const RENDER_DEBOUNCE_MS = 100
+const RENDER_DEBOUNCE_MS = 500
 
 let mermaidPromise: Promise<typeof import('mermaid').default> | null = null
 
@@ -183,7 +183,7 @@ export default function MarkdownRender() {
 
   const scheduleRender = useMemo(
     () => debounce(async (
-      seq: number,
+      isCurrent: () => boolean,
       nextContent: string,
       styleId: string,
       themeId: string,
@@ -203,12 +203,12 @@ export default function MarkdownRender() {
           ...getMarkdownLocaleTexts(),
         })
 
-        if (seq === renderSeqRef.current) {
+        if (isCurrent()) {
           setRenderedHtml('html', result.result)
         }
       }
       catch (error) {
-        if (seq === renderSeqRef.current) {
+        if (isCurrent()) {
           const message = error instanceof Error ? error.message : '转换失败'
           setRenderedHtml('html', message)
         }
@@ -220,7 +220,15 @@ export default function MarkdownRender() {
   useEffect(() => {
     const seq = renderSeqRef.current + 1
     renderSeqRef.current = seq
-    scheduleRender(seq, deferredContent, markdownStyle, codeTheme, customCss, enableFootnoteLinks, openLinksInNewWindow)
+    scheduleRender(
+      () => seq === renderSeqRef.current,
+      deferredContent,
+      markdownStyle,
+      codeTheme,
+      customCss,
+      enableFootnoteLinks,
+      openLinksInNewWindow,
+    )
 
     return () => {
       scheduleRender.cancel()
