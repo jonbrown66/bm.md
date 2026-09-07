@@ -11,6 +11,14 @@ describe('markdown -> html render (general)', () => {
     expect(html).toContain('>红色</mark>')
   })
 
+  it('renders big highlights as a dedicated variant', async () => {
+    const html = await render({ markdown: '=={big}重点内容==' })
+
+    expect(html).toContain('data-highlight="big"')
+    expect(html).toContain('markdown-highlight-big')
+    expect(html).toContain('>重点内容</mark>')
+  })
+
   it('falls back to yellow for unknown highlight colors', async () => {
     const html = await render({ markdown: '=={pink}未知颜色==' })
 

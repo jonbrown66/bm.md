@@ -205,6 +205,16 @@ ${getXhsTextFlowCss()}
   color: #444b55 !important;
 }
 
+.xhs-article #bm-md mark[data-highlight='big'] {
+  background-color: transparent !important;
+  color: #1d4ed8 !important;
+  font-family: 'Clash Display', 'Microsoft YaHei', 'PingFang SC', 'Noto Sans SC', sans-serif !important;
+  font-size: 38px !important;
+  font-weight: 700 !important;
+  line-height: 1.2 !important;
+  padding: 0.05em 0.08em !important;
+}
+
 .xhs-cover {
   display: flex;
   min-height: ${XHS_USABLE_PAGE_HEIGHT}px;

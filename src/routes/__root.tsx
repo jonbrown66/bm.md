@@ -14,6 +14,7 @@ import appCss from '../styles.css?url'
 
 // Google Fonts URL - 仅加载 Logo 使用的字符
 const fontUrl = `https://fonts.googleapis.cn/css2?family=Doto:wght@700&display=swap&text=${encodeURIComponent(['bm.md', '404'].join(''))}`
+const clashDisplayFontUrl = 'https://api.fontshare.com/v2/css?f[]=clash-display@700&display=swap'
 const manifestLink = import.meta.env.PROD
   ? [{ rel: 'manifest', href: '/manifest.webmanifest' }]
   : []
@@ -45,11 +46,13 @@ export const Route = createRootRoute({
       // Preconnect
       { rel: 'preconnect', href: 'https://fonts.googleapis.cn' },
       { rel: 'preconnect', href: 'https://fonts.gstatic.cn', crossOrigin: 'anonymous' },
+      { rel: 'preconnect', href: 'https://api.fontshare.com' },
       // Preload 关键资源
       { rel: 'preload', href: appCss, as: 'style' },
       { rel: 'preload', href: '/blur-mask.svg', as: 'image', type: 'image/svg+xml' },
       // Stylesheets
       { rel: 'stylesheet', href: fontUrl },
+      { rel: 'stylesheet', href: clashDisplayFontUrl },
       { rel: 'stylesheet', href: appCss },
       // Meta
       { rel: 'canonical', href: appConfig.url },

@@ -2,7 +2,7 @@ import type { Element, ElementContent, Root } from 'hast'
 import type { Plugin } from 'unified'
 import { visit } from 'unist-util-visit'
 
-const highlightColors = new Set(['yellow', 'red', 'blue', 'green', 'purple', 'gray'])
+const highlightVariants = new Set(['yellow', 'red', 'blue', 'green', 'purple', 'gray', 'big'])
 
 function parseMarkTags(value: string): ElementContent[] {
   const pattern = /==(?:\{([a-z]+)\})?(.+?)==/gi
@@ -19,16 +19,16 @@ function parseMarkTags(value: string): ElementContent[] {
       nodes.push({ type: 'text', value: value.slice(cursor, index) })
     }
 
-    const requestedColor = match[1]?.toLowerCase()
-    const color = requestedColor && highlightColors.has(requestedColor)
-      ? requestedColor
+    const requestedVariant = match[1]?.toLowerCase()
+    const variant = requestedVariant && highlightVariants.has(requestedVariant)
+      ? requestedVariant
       : 'yellow'
     nodes.push({
       type: 'element',
       tagName: 'mark',
       properties: {
-        className: ['markdown-highlight', `markdown-highlight-${color}`],
-        dataHighlight: color,
+        className: ['markdown-highlight', `markdown-highlight-${variant}`],
+        dataHighlight: variant,
       },
       children: [{ type: 'text', value: match[2] ?? '' }],
     })

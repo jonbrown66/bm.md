@@ -56,7 +56,7 @@
   margin: 0;
 }
 
-/* 可选色 Markdown 高亮：=={red}文本== */
+/* 可选色 Markdown 高亮：=={red}文本==；大字号强调：=={big}文本== */
 #bm-md mark[data-highlight='yellow'] {
   background-color: #f6e7a8;
   color: #493f1f;
@@ -85,6 +85,17 @@
 #bm-md mark[data-highlight='gray'] {
   background-color: #e7e8ea;
   color: #444b55;
+}
+
+/* 大字号强调：英文使用 Clash Display，中文回退至无衬线字体 */
+#bm-md mark[data-highlight='big'] {
+  background-color: transparent;
+  color: #1d4ed8;
+  font-family: 'Clash Display', 'Microsoft YaHei', 'PingFang SC', 'Noto Sans SC', sans-serif;
+  font-size: 38px;
+  font-weight: 700;
+  line-height: 1.2;
+  padding: 0.05em 0.08em;
 }
 
 /* ========================================
