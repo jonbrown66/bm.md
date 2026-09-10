@@ -1,4 +1,5 @@
 import { toast } from 'sonner'
+import { formatXhsImageFilename, getExportBaseName } from './export-filename'
 
 const XHS_EXPORT_DPR = 2
 
@@ -114,6 +115,7 @@ async function capturePage(
   page: HTMLElement,
   pageNumber: number,
   snapdom: typeof import('@zumer/snapdom').snapdom,
+  title?: string,
 ) {
   const previousBoxShadow = page.style.boxShadow
   page.style.boxShadow = 'none'
@@ -135,7 +137,7 @@ async function capturePage(
       width: page.offsetWidth,
     })
     await image.decode()
-    downloadPngImage(image, `bm-md-xhs-${String(pageNumber).padStart(2, '0')}.png`)
+    downloadPngImage(image, formatXhsImageFilename(pageNumber, title))
   }
   finally {
     if (previousBoxShadow) {
@@ -147,7 +149,7 @@ async function capturePage(
   }
 }
 
-async function exportXhsPages(pageIndex?: number) {
+async function exportXhsPages(pageIndex?: number, customTitle?: string) {
   const pages = Array.from(
     document.querySelectorAll<HTMLElement>('[data-xhs-export-page="true"]'),
   )
@@ -166,6 +168,7 @@ async function exportXhsPages(pageIndex?: number) {
   try {
     const pageElements = selectedPages.map(({ page }) => page)
     const { preCache, snapdom } = await import('@zumer/snapdom')
+    const title = getExportBaseName(undefined, customTitle)
 
     await document.fonts.ready
     await inlinePageImages(pageElements)
@@ -179,8 +182,12 @@ async function exportXhsPages(pageIndex?: number) {
       })
     }
 
-    for (const { page, index } of selectedPages) {
-      await capturePage(page, index + 1, snapdom)
+    for (let i = 0; i < selectedPages.length; i++) {
+      const { page, index } = selectedPages[i]
+      if (i > 0) {
+        await new Promise(resolve => setTimeout(resolve, 100))
+      }
+      await capturePage(page, index + 1, snapdom, title)
     }
 
     toast.success(pageIndex === undefined
@@ -193,10 +200,10 @@ async function exportXhsPages(pageIndex?: number) {
   }
 }
 
-export async function exportXhsImage(pageIndex: number) {
-  await exportXhsPages(pageIndex)
+export async function exportXhsImage(pageIndex: number, title?: string) {
+  await exportXhsPages(pageIndex, title)
 }
 
-export async function exportXhsImages() {
-  await exportXhsPages()
+export async function exportXhsImages(title?: string) {
+  await exportXhsPages(undefined, title)
 }

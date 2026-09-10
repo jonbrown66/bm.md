@@ -1,6 +1,7 @@
 import type { CaptureContext, SnapdomPlugin } from '@zumer/snapdom'
 import type { PreviewIframe } from './preview'
 import { toast } from 'sonner'
+import { getExportBaseName } from './export-filename'
 import { inlineImages } from './inline-images'
 import { parsePdfBackgroundColor } from './pdf-colors'
 import { getPreviewIframe, setPreviewImageCaptionVisibility, withPreviewImageCaptions } from './preview'
@@ -314,7 +315,7 @@ function alignPageBreaksToRaster(
   return alignedBreaks
 }
 
-async function exportPreviewToPdf(exportPreview: PreviewIframe, loadingToast: string | number) {
+async function exportPreviewToPdf(exportPreview: PreviewIframe, loadingToast: string | number, fileName?: string) {
   const { snapdom } = await import('@zumer/snapdom')
   const { default: JsPDF } = await import('jspdf')
   const restoreImages = await inlineImages([exportPreview.content])
@@ -426,7 +427,8 @@ async function exportPreviewToPdf(exportPreview: PreviewIframe, loadingToast: st
       prevBreak = sourceEnd
     }
 
-    pdf.save('bm.md.pdf')
+    const baseName = getExportBaseName(undefined, fileName)
+    pdf.save(`${baseName}.pdf`)
     toast.success('已导出 PDF', { id: loadingToast })
   }
   finally {
@@ -434,7 +436,7 @@ async function exportPreviewToPdf(exportPreview: PreviewIframe, loadingToast: st
   }
 }
 
-export async function exportPdf() {
+export async function exportPdf(fileName?: string) {
   if (isExporting) {
     toast.info('正在导出中，请稍候...')
     return
@@ -448,7 +450,7 @@ export async function exportPdf() {
   const loadingToast = toast.loading('正在生成 PDF...')
 
   try {
-    await withPreviewImageCaptions(exportPreview => exportPreviewToPdf(exportPreview, loadingToast))
+    await withPreviewImageCaptions(exportPreview => exportPreviewToPdf(exportPreview, loadingToast, fileName))
   }
   catch (error) {
     console.error(error)

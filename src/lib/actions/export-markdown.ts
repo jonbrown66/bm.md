@@ -1,6 +1,6 @@
 import fileSaver from 'file-saver'
 import { toast } from 'sonner'
-import { useFilesStore } from '@/stores/files'
+import { getExportBaseName } from './export-filename'
 
 const { saveAs } = fileSaver
 
@@ -10,8 +10,7 @@ export function exportMarkdown(content: string, fileName?: string) {
     return
   }
 
-  const activeFile = useFilesStore.getState().getActiveFile()
-  const exportFileName = fileName ?? activeFile?.name ?? 'bm.md'
+  const exportFileName = fileName ?? `${getExportBaseName(content)}.md`
 
   const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' })
   saveAs(blob, exportFileName)

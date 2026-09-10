@@ -1,4 +1,5 @@
 export { copyPlatform } from './copy-platform'
+export { formatXhsImageFilename, getExportBaseName, sanitizeFilename } from './export-filename'
 export { copyImage, exportImage } from './export-image'
 export { exportMarkdown } from './export-markdown'
 export { exportPdf, printPreview } from './export-pdf'

@@ -2,6 +2,7 @@ import type { CaptureResult } from '@zumer/snapdom'
 import fileSaver from 'file-saver'
 import { toast } from 'sonner'
 import { copyImage as copyImageToClipboard } from '@/lib/clipboard'
+import { getExportBaseName } from './export-filename'
 import { withPreviewImageCaptions } from './preview'
 
 const IMAGE_EXPORT_DPR = 2
@@ -14,7 +15,7 @@ async function createPreviewSnapshot(): Promise<CaptureResult | null> {
   })
 }
 
-export async function exportImage() {
+export async function exportImage(fileName?: string) {
   try {
     const snapshot = await createPreviewSnapshot()
     if (!snapshot)
@@ -25,7 +26,8 @@ export async function exportImage() {
       quality: 0.99,
       dpr: IMAGE_EXPORT_DPR,
     })
-    saveAs(blob, 'bm.md.jpg')
+    const baseName = getExportBaseName(undefined, fileName)
+    saveAs(blob, `${baseName}.jpg`)
     toast.success('已导出图片')
   }
   catch (error) {
