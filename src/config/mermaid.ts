@@ -78,8 +78,13 @@ export const mermaidConfig: MermaidConfig = {
     htmlLabels: true,
     curve: 'stepAfter',
     padding: 20,
-    nodeSpacing: 40,
-    rankSpacing: 40,
+    nodeSpacing: 56,
+    rankSpacing: 52,
+    // 子图标题不参与节点间距计算，单独留出下方空间以避免压住首行节点。
+    subGraphTitleMargin: {
+      top: 8,
+      bottom: 28,
+    },
   },
   securityLevel: 'loose',
 }

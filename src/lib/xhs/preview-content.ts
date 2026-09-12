@@ -71,9 +71,13 @@ export async function renderMermaidNodes(container: HTMLElement) {
     },
     flowchart: {
       ...mermaidConfig.flowchart,
-      nodeSpacing: Math.round(26 * xhsLayoutScale),
-      rankSpacing: Math.round(18 * xhsLayoutScale),
+      nodeSpacing: Math.round(34 * xhsLayoutScale),
+      rankSpacing: Math.round(28 * xhsLayoutScale),
       padding: Math.round(10 * xhsLayoutScale),
+      subGraphTitleMargin: {
+        top: Math.round(8 * xhsLayoutScale),
+        bottom: Math.round(20 * xhsLayoutScale),
+      },
     },
   })
 

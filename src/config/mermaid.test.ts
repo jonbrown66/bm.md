@@ -21,4 +21,12 @@ describe('mermaid visual configuration', () => {
   it('uses directional flowchart connectors instead of soft curves', () => {
     expect(mermaidConfig.flowchart?.curve).toBe('stepAfter')
   })
+
+  it('reserves vertical space between subgraph titles and their first nodes', () => {
+    expect(mermaidConfig.flowchart?.subGraphTitleMargin).toEqual({
+      top: 8,
+      bottom: 28,
+    })
+    expect(mermaidConfig.flowchart?.nodeSpacing).toBe(56)
+  })
 })
