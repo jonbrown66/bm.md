@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { getMediaFitScale, paginateBlocks, paginateByHeight } from './pagination'
+import { getPageImageFitScale } from './preview-pagination'
 
 describe('xhs pagination', () => {
   it('returns no pages for empty height', () => {
@@ -99,5 +100,15 @@ describe('getMediaFitScale', () => {
       tolerance: 0,
       minScale: 0.8,
     })).toBeNull()
+  })
+})
+
+describe('getPageImageFitScale', () => {
+  it('uses the actual remaining height and keeps a reasonably scaled image on the page', () => {
+    expect(getPageImageFitScale(330, 400, 360)).toBeCloseTo(290 / 360)
+  })
+
+  it('moves an image when fitting it would make it too small', () => {
+    expect(getPageImageFitScale(325, 400, 360)).toBeNull()
   })
 })

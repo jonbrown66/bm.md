@@ -79,14 +79,27 @@ function getImageFitScale(image: HTMLImageElement) {
   return Number.isFinite(scale) && scale > 0 ? scale : 1
 }
 
+export function getPageImageFitScale(availableHeight: number, blockHeight: number, mediaHeight: number) {
+  // 最终仍由 fitsPage 严格校验，预留容差会导致缩放后依旧超高。
+  return getMediaFitScale({
+    availableHeight,
+    blockHeight,
+    mediaHeight,
+    tolerance: 0,
+    minScale: XHS_MIN_MEDIA_FIT_SCALE,
+  })
+}
+
 function fitImageBlockToAvailableHeight(
   probe: HTMLElement,
   element: HTMLElement,
   currentHtml: string,
-  minScale = XHS_MIN_MEDIA_FIT_SCALE,
 ) {
   const currentHeight = getArticleHeight(probe, currentHtml)
   const candidateHeight = getArticleHeight(probe, `${currentHtml}${element.outerHTML}`)
+  if (candidateHeight <= XHS_USABLE_PAGE_HEIGHT) {
+    return element.outerHTML
+  }
   const measuredElement = probe.querySelector<HTMLElement>('#bm-md')?.lastElementChild
   if (!(measuredElement instanceof HTMLElement)) {
     return null
@@ -107,15 +120,9 @@ function fitImageBlockToAvailableHeight(
     return null
   }
 
-  const scale = getMediaFitScale({
-    availableHeight: XHS_USABLE_PAGE_HEIGHT - currentHeight,
-    blockHeight,
-    mediaHeight: imageRect.height,
-    tolerance: XHS_PAGE_HEIGHT_TOLERANCE,
-    minScale,
-  })
+  const scale = getPageImageFitScale(XHS_USABLE_PAGE_HEIGHT - currentHeight, blockHeight, imageRect.height)
 
-  if (scale === null || scale === 1) {
+  if (scale === null || scale === 1 || getImageFitScale(image) * scale < XHS_MIN_MEDIA_FIT_SCALE) {
     return null
   }
 
@@ -125,8 +132,8 @@ function fitImageBlockToAvailableHeight(
     return null
   }
 
-  fittedImage.style.setProperty('width', `${Math.round(imageRect.width * scale)}px`, 'important')
-  fittedImage.style.setProperty('height', 'auto', 'important')
+  fittedImage.style.setProperty('width', `${Math.floor(imageRect.width * scale)}px`, 'important')
+  fittedImage.style.setProperty('height', `${Math.floor(imageRect.height * scale)}px`, 'important')
   fittedImage.style.setProperty('max-height', 'none', 'important')
   fittedImage.dataset.xhsFitScale = String(getImageFitScale(image) * scale)
 
@@ -225,6 +232,33 @@ function mergeImageOnlyPages(pages: XhsRenderedPage[], probe: HTMLElement) {
 
 function isHeadingTag(tagName: string) {
   return /^H[1-6]$/.test(tagName)
+}
+
+function refillLeadingImages(pages: XhsRenderedPage[], probe: HTMLElement) {
+  for (let index = 1; index < pages.length; index++) {
+    const previousPage = pages[index - 1]
+    const page = pages[index]
+    const current = document.createElement('div')
+    current.innerHTML = page.html
+    const imageBlock = current.firstElementChild
+    if (!(imageBlock instanceof HTMLElement) || !getSingleImage(imageBlock)) {
+      continue
+    }
+
+    // 先把配图放回文案页；包括原尺寸已能放下的情况。
+    const mergedImage = fitImageBlockToAvailableHeight(probe, imageBlock, previousPage.html)
+    if (mergedImage) {
+      previousPage.html = normalizePageHtml(`${previousPage.html}${mergedImage}`)
+      imageBlock.remove()
+      page.html = normalizePageHtml(current.innerHTML)
+      if (!hasRenderableContent(page.html)) {
+        pages.splice(index, 1)
+        index -= 1
+      }
+      continue
+    }
+  }
+  removeBlankPages(pages)
 }
 
 function isHeadingHtml(html: string) {
@@ -806,6 +840,7 @@ export function buildSemanticPages(
       mergeImageOnlyPages(pages, probe)
       normalizePageList(pages, probe)
     }
+    refillLeadingImages(pages, probe)
     pages.forEach((page, index) => {
       page.id = `xhs-card-${index}`
     })

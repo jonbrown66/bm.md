@@ -22,7 +22,7 @@ export function getXhsArticleCss(fontSize: number, lineHeight: number, padding: 
   const scaledFontSize = fontSize * XHS_LAYOUT_SCALE
   const scaledPadding = padding * XHS_LAYOUT_SCALE
   const topPadding = Math.round(scaledPadding * 1.28)
-  const bottomPadding = Math.round(scaledPadding * 1.71)
+  const bottomPadding = scaledPadding
   const fontList = getXhsFontOption(fontFamily).fontFamily
   const isOppoSans = fontFamily === 'oppo-sans'
   const bodyFontWeight = isOppoSans ? 300 : 400
