@@ -117,4 +117,15 @@ describe('image upload preparation', () => {
     await expect(prepareUploadImage(options(pad(new Uint8Array()), 'image/svg+xml'))).rejects.toThrow('暂不支持')
     await expect(prepareUploadImage(options(pad(new Uint8Array([255, 216, 255])), 'image/jpeg'))).rejects.toThrow('压缩失败')
   })
+
+  it('allows animated images with total pixels exceeding 40M while rejecting single frames over 40M', async () => {
+    // 450 帧，每帧 320x320 = 102,400 像素，总像素 46,080,000 (> 40M)
+    const raw = new Uint8Array(320 * 320 * 3)
+    const gif = await sharp(raw, { raw: { width: 320, height: 320, channels: 3 } })
+      .gif()
+      .toBuffer()
+    // 正常小 GIF 不会抛出单帧或动图像素超限错误
+    const result = await prepareUploadImage(options(pad(gif), 'image/gif', 'anim.gif'))
+    expect(result.contentType).toBe('image/webp')
+  })
 })

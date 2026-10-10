@@ -9,7 +9,10 @@ import {
   SOURCE_IMAGE_SIZE_ERROR,
 } from './image-upload-policy'
 
-const maxInputPixels = 40_000_000
+/** 单帧图片最大像素（约 4000 万像素，如 8000x5000）。 */
+const maxFramePixels = 40_000_000
+/** 动图总像素上限（动图包含全部帧，放宽至 5 亿像素，可容纳 2K 分辨率 160+ 帧的高清动图）。 */
+const maxAnimatedTotalPixels = 500_000_000
 const maxCachedCopies = 128
 const copyCacheLifetime = 10 * 60 * 1000
 const uploadedCopies = new Map<string, { url: string, expiresAt: number }>()
@@ -107,12 +110,16 @@ export async function prepareUploadImage(options: UploadOptions, target: ImageUp
   try {
     // 仅在服务端确需压缩时加载原生模块，小图直接沿用原始字节。
     const { default: sharp } = await import('sharp')
-    const metadata = await sharp(bytes, { limitInputPixels: maxInputPixels }).metadata()
+    const metadata = await sharp(bytes, { limitInputPixels: maxAnimatedTotalPixels }).metadata()
     const pages = metadata.pages ?? 1
     const width = metadata.width
     const height = metadata.pageHeight ?? metadata.height
-    if (!width || !height || width * height * pages > maxInputPixels) {
-      throw new ImageProcessingError('图片总像素超过 4000 万（动图包含全部帧），请先缩小图片')
+    const framePixels = (width ?? 0) * (height ?? 0)
+    if (!width || !height || framePixels > maxFramePixels) {
+      throw new ImageProcessingError('图片单帧分辨率过大（超过 4000 万像素），请先缩小图片尺寸')
+    }
+    if (pages > 1 && framePixels * pages > maxAnimatedTotalPixels) {
+      throw new ImageProcessingError('动图总像素超过 5 亿（动图包含全部帧），请先缩小动图尺寸或减少帧数')
     }
 
     const animated = pages > 1
@@ -138,7 +145,7 @@ export async function prepareUploadImage(options: UploadOptions, target: ImageUp
       if (remainingSeconds < 1) {
         break
       }
-      let pipeline = sharp(bytes, { animated, limitInputPixels: maxInputPixels })
+      let pipeline = sharp(bytes, { animated, limitInputPixels: maxAnimatedTotalPixels })
       if (!animated) {
         pipeline = pipeline.rotate()
       }
@@ -164,7 +171,10 @@ export async function prepareUploadImage(options: UploadOptions, target: ImageUp
       else {
         pipeline = pipeline.jpeg({ quality, chromaSubsampling: '4:4:4' })
       }
-      const output = await pipeline.timeout({ seconds: Math.min(10, remainingSeconds) }).toBuffer()
+      const attemptTimeoutSeconds = animated
+        ? Math.min(25, remainingSeconds)
+        : Math.min(10, remainingSeconds)
+      const output = await pipeline.timeout({ seconds: Math.max(1, attemptTimeoutSeconds) }).toBuffer()
       if (output.byteLength <= maxBytes) {
         return {
           file: new Blob([new Uint8Array(output)], { type: contentType }),

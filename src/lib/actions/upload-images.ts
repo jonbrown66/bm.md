@@ -1,9 +1,11 @@
+import { createElement } from 'react'
 import { toast } from 'sonner'
 import {
   extractRemoteImageReferences,
   replaceImageUrls,
 } from '@/lib/markdown/images'
 import { uploadRemoteImages } from '@/services/upload'
+import { UploadFailuresDescription } from './upload-failures-description'
 
 interface UploadImagesResult {
   oldUrl: string
@@ -95,13 +97,25 @@ function showUploadFailuresToast(options: {
     2,
   ))
 
-  toast.warning(`已上传 ${options.successfulCount} 张图片，${failedCount} 张失败`, {
+  const title = options.successfulCount > 0
+    ? `已上传 ${options.successfulCount} 张图片，${failedCount} 张失败`
+    : `${failedCount} 张图片上传失败`
+
+  toast.warning(title, {
     id: options.toastId,
-    description,
+    description: createElement(UploadFailuresDescription, {
+      results: options.results.filter(result => result.status === 'failed'),
+    }),
     action: {
       label: '重试失败项',
       onClick: options.retry,
     },
+    classNames: {
+      toast: '!items-start !w-[420px] max-w-[90vw]',
+      content: 'min-w-0 flex-1',
+      actionButton: '!shrink-0 !mt-1',
+    },
+    duration: 8000,
   })
 }
 
