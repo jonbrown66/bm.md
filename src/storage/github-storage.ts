@@ -89,6 +89,11 @@ export function buildGitHubImageUrl(options: BuildGitHubImageUrlOptions): string
 export class GitHubStorage implements StorageProvider {
   readonly type = 'github' as const
 
+  get cacheScope(): string {
+    const { owner, repo, branch, basePath, publicBaseUrl } = this.getConfig()
+    return JSON.stringify(['github', owner, repo, branch, basePath, publicBaseUrl])
+  }
+
   private getConfig() {
     const {
       GITHUB_IMAGE_TOKEN,

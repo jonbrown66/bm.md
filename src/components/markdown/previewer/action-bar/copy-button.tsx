@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import type { SupportedPlatform } from '@/config'
 import { Code2 } from 'lucide-react'
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { platformConfig } from '@/config'
@@ -23,12 +24,22 @@ interface CopyButtonProps {
 }
 
 export function CopyButton({ platform }: CopyButtonProps) {
+  const [isCopying, setIsCopying] = useState(false)
   const { getHtml, isLoading } = usePlatformCopy(platform)
   const config = platformConfig[platform]
 
   const onCopyClick = async () => {
+    if (isCopying) {
+      return
+    }
+    setIsCopying(true)
     trackEvent('copy', platform, 'button')
-    await copyPlatform(platform, getHtml)
+    try {
+      await copyPlatform(platform, getHtml)
+    }
+    finally {
+      setIsCopying(false)
+    }
   }
 
   return (
@@ -40,7 +51,7 @@ export function CopyButton({ platform }: CopyButtonProps) {
             size="icon"
             aria-label={config.label}
             onClick={onCopyClick}
-            disabled={isLoading}
+            disabled={isLoading || isCopying}
           >
             {platformIcons[platform]}
           </Button>

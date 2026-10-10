@@ -42,7 +42,7 @@ export function getUploadProgressMessage(phase: UploadProgressPhase, count: numb
   }
 
   if (phase === 'commit') {
-    return '正在提交到 GitHub 图床...'
+    return '正在处理并上传图片，超过 10MB 将自动压缩...'
   }
 
   return `正在重试 ${count} 张失败图片...`

@@ -24,6 +24,8 @@ export interface UploadOptions {
 export interface StorageProvider {
   /** 提供商类型 */
   readonly type: StorageProviderType
+  /** 非敏感目标标识，用于隔离处理副本缓存；未提供时禁用副本缓存。 */
+  readonly cacheScope?: string
   /** 上传文件 */
   upload: (options: UploadOptions) => Promise<UploadResult>
   /** 批量上传文件 */

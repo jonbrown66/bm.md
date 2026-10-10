@@ -1,9 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { detectImageContentType } from '@/lib/image-content'
+import { ImageProcessingError, MAX_UPLOAD_IMAGE_BYTES, readLimitedBody } from '@/lib/image-upload-policy'
 import { corsMiddleware } from '@/lib/middleware/cors'
-
-const _1MB = 1024 * 1024
-const maxFileSize = 8
 
 function isHttpUrl(value: string) {
   const url = new URL(value)
@@ -37,21 +35,7 @@ export const Route = createFileRoute('/api/proxy/image')({
             )
           }
 
-          const contentLength = Number(response.headers.get('content-length') || 0)
-          if (contentLength > maxFileSize * _1MB) {
-            return Response.json(
-              { error: `图片大小不能超过 ${maxFileSize}MB` },
-              { status: 413 },
-            )
-          }
-
-          const buffer = await response.arrayBuffer()
-          if (buffer.byteLength > maxFileSize * _1MB) {
-            return Response.json(
-              { error: `图片大小不能超过 ${maxFileSize}MB` },
-              { status: 413 },
-            )
-          }
+          const buffer = await readLimitedBody(response, MAX_UPLOAD_IMAGE_BYTES, '图片代理上限为 10MB，请先使用一键上传压缩图片')
 
           const headerContentType = response.headers.get('content-type')?.split(';').at(0)?.trim() || ''
           const contentType = headerContentType.startsWith('image/')
@@ -73,6 +57,9 @@ export const Route = createFileRoute('/api/proxy/image')({
           })
         }
         catch (error) {
+          if (error instanceof ImageProcessingError) {
+            return Response.json({ error: error.message }, { status: error.status })
+          }
           console.error('Image proxy error:', error)
           return Response.json(
             { error: '图片代理失败' },

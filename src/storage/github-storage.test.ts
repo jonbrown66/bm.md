@@ -28,6 +28,17 @@ describe('github storage helpers', () => {
     expect(key).toBe('images/2026-06-19/image-id.png')
   })
 
+  it('isolates copy caches by destination without including credentials', () => {
+    process.env.GITHUB_IMAGE_TOKEN = 'test-token'
+    process.env.GITHUB_IMAGE_OWNER = 'example-owner'
+    process.env.GITHUB_IMAGE_REPO = 'first-repo'
+    const storage = new GitHubStorage()
+    const firstScope = storage.cacheScope
+    expect(firstScope).not.toContain('test-token')
+    process.env.GITHUB_IMAGE_REPO = 'second-repo'
+    expect(storage.cacheScope).not.toBe(firstScope)
+  })
+
   it('uses cdn base url when configured', () => {
     const url = buildGitHubImageUrl({
       owner: 'jonbrown66',

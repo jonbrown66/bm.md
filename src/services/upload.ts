@@ -1,4 +1,6 @@
+import type { ImageUploadTarget } from '@/lib/image-upload-policy'
 import { apiFetch } from '@/lib/api'
+import { MAX_SOURCE_IMAGE_BYTES, SOURCE_IMAGE_SIZE_ERROR } from '@/lib/image-upload-policy'
 
 export interface UploadImageResponse {
   url: string
@@ -17,6 +19,10 @@ export interface UploadRemoteImagesResponse {
 
 export async function uploadImage(formData: FormData): Promise<UploadImageResponse> {
   try {
+    const file = formData.get('file')
+    if (file instanceof Blob && file.size > MAX_SOURCE_IMAGE_BYTES) {
+      throw new Error(SOURCE_IMAGE_SIZE_ERROR)
+    }
     return await apiFetch<UploadImageResponse>('/api/upload/image', {
       method: 'POST',
       body: formData,
@@ -28,14 +34,14 @@ export async function uploadImage(formData: FormData): Promise<UploadImageRespon
   }
 }
 
-export async function uploadRemoteImages(urls: string[]): Promise<UploadRemoteImagesResponse> {
+export async function uploadRemoteImages(urls: string[], target: ImageUploadTarget = 'default'): Promise<UploadRemoteImagesResponse> {
   try {
     return await apiFetch<UploadRemoteImagesResponse>('/api/upload/remote-images', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ urls }),
+      body: JSON.stringify({ urls, target }),
     })
   }
   catch (error) {
