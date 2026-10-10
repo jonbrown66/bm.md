@@ -1,17 +1,15 @@
-import type { ImageUploadTarget } from '@/lib/image-upload-policy'
-import type { UploadOptions, UploadResult } from '@/storage'
+import type { StorageProvider, UploadOptions } from '@/storage'
 import { createFileRoute } from '@tanstack/react-router'
 import * as z from 'zod'
 import { detectImageContentType, getImageFilename } from '@/lib/image-content'
-import { ImageProcessingError, readLimitedBody } from '@/lib/image-upload-policy'
+import { ImageProcessingError, MAX_REMOTE_IMAGE_COUNT, readLimitedBody } from '@/lib/image-upload-policy'
 import { corsMiddleware } from '@/lib/middleware/cors'
-import { prepareUploadImage, uploadPreparedWechatImage } from '@/lib/prepare-upload-image.server'
+import { prepareUploadImage, uploadPreparedImages } from '@/lib/prepare-upload-image.server'
 import { getStorageProvider, StorageError } from '@/storage'
 
-const maxImageCount = 30
-
 const remoteImagesSchema = z.object({
-  urls: z.array(z.string().url()).min(1).max(maxImageCount),
+  urls: z.array(z.string().url().max(2048)).min(1).max(MAX_REMOTE_IMAGE_COUNT),
+  // 兼容已有客户端，但两个值都使用同一上传策略。
   target: z.enum(['default', 'wechat']).default('default'),
 })
 
@@ -32,21 +30,42 @@ function isHttpUrl(value: string): boolean {
   return url.protocol === 'http:' || url.protocol === 'https:'
 }
 
-async function downloadRemoteImage(oldUrl: string, target: ImageUploadTarget): Promise<DownloadedRemoteImage | RemoteImageResult> {
+async function downloadRemoteImage(oldUrl: string, storage: StorageProvider, signal: AbortSignal): Promise<DownloadedRemoteImage | RemoteImageResult> {
   try {
+    signal.throwIfAborted()
     if (!isHttpUrl(oldUrl)) {
       return { oldUrl, status: 'failed', error: '只支持 http/https 图片链接' }
     }
+    if (storage.isUploadedImageUrl?.(oldUrl)) {
+      return { oldUrl, newUrl: oldUrl, status: 'success' }
+    }
 
-    const response = await fetch(oldUrl, {
-      signal: AbortSignal.timeout(15_000),
-      headers: {
-        Accept: 'image/*',
-      },
-    })
+    let response: Response | undefined
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        response = await fetch(oldUrl, {
+          signal: AbortSignal.any([signal, AbortSignal.timeout(15_000)]),
+          headers: { Accept: 'image/*' },
+        })
+        if (attempt === 0 && [429, 500, 502, 503, 504].includes(response.status)) {
+          const retryAfter = Number(response.headers.get('retry-after') || 0)
+          if (retryAfter > 5)
+            break
+          await response.body?.cancel()
+          await new Promise(resolve => setTimeout(resolve, Math.max(500, retryAfter * 1000)))
+          continue
+        }
+        break
+      }
+      catch (error) {
+        if (attempt > 0 || signal.aborted || !(error instanceof TypeError || (error instanceof DOMException && error.name === 'TimeoutError')))
+          throw error
+      }
+    }
 
-    if (!response.ok) {
-      return { oldUrl, status: 'failed', error: `下载失败: ${response.status}` }
+    if (!response?.ok) {
+      await response?.body?.cancel()
+      return { oldUrl, status: 'failed', error: `下载失败: ${response?.status ?? '请求未完成'}` }
     }
 
     const buffer = await readLimitedBody(response)
@@ -63,10 +82,7 @@ async function downloadRemoteImage(oldUrl: string, target: ImageUploadTarget): P
     const filename = getImageFilename(oldUrl, detectedContentType)
     const file = new Blob([buffer], { type: detectedContentType })
     const original = { file, filename, contentType: detectedContentType }
-    const prepared = await prepareUploadImage(original, target)
-    if (target === 'wechat' && prepared === original) {
-      return { oldUrl, newUrl: oldUrl, status: 'success' }
-    }
+    const prepared = await prepareUploadImage(original)
 
     return {
       oldUrl,
@@ -74,6 +90,9 @@ async function downloadRemoteImage(oldUrl: string, target: ImageUploadTarget): P
     }
   }
   catch (error) {
+    if (error instanceof StorageError) {
+      return { oldUrl, status: 'failed', error: error.message }
+    }
     if (error instanceof ImageProcessingError) {
       return { oldUrl, status: 'failed', error: error.message }
     }
@@ -94,38 +113,25 @@ function isRemoteImageResult(value: DownloadedRemoteImage | RemoteImageResult): 
   return 'status' in value
 }
 
-async function uploadDownloadedImages(images: DownloadedRemoteImage[], target: ImageUploadTarget): Promise<RemoteImageResult[]> {
+async function uploadDownloadedImages(images: DownloadedRemoteImage[], storage: StorageProvider): Promise<RemoteImageResult[]> {
   if (images.length === 0) {
     return []
   }
 
   try {
-    const storage = getStorageProvider()
-    if (target === 'wechat') {
-      const results = await Promise.allSettled(images.map(image => uploadPreparedWechatImage(image.uploadOptions, storage)))
-      return images.map((image, index): RemoteImageResult => {
-        const result = results[index]
-        if (result.status === 'fulfilled') {
-          return { oldUrl: image.oldUrl, newUrl: result.value.url, status: 'success' }
-        }
-        const error: unknown = result.reason
-        const message = error instanceof StorageError || error instanceof ImageProcessingError
-          ? error.message
-          : '图片上传到存储失败'
-        console.error('Wechat image upload error:', message)
-        return { oldUrl: image.oldUrl, status: 'failed', error: message }
-      })
-    }
-    const uploadResults: UploadResult[] = storage.uploadMany
-      ? await storage.uploadMany(images.map(image => image.uploadOptions))
-      : await Promise.all(images.map(image => storage.upload(image.uploadOptions)))
-
-    return images.map((image, index) => ({
-      oldUrl: image.oldUrl,
-      newUrl: uploadResults[index]?.url,
-      status: uploadResults[index]?.url ? 'success' : 'failed',
-      error: uploadResults[index]?.url ? undefined : '存储服务未返回图片链接',
-    }))
+    const results = await uploadPreparedImages(images.map(image => image.uploadOptions), storage)
+    return images.map((image, index): RemoteImageResult => {
+      const result = results[index]
+      if (result.status === 'fulfilled') {
+        return { oldUrl: image.oldUrl, newUrl: result.value.url, status: 'success' }
+      }
+      const error: unknown = result.reason
+      const message = error instanceof StorageError || error instanceof ImageProcessingError
+        ? error.message
+        : '图片上传到存储失败'
+      console.error('Image upload error:', message)
+      return { oldUrl: image.oldUrl, status: 'failed', error: message }
+    })
   }
   catch (error) {
     if (error instanceof StorageError) {
@@ -146,16 +152,21 @@ async function uploadDownloadedImages(images: DownloadedRemoteImage[], target: I
   }
 }
 
-async function migrateRemoteImages(urls: string[], target: ImageUploadTarget): Promise<RemoteImageResult[]> {
+async function migrateRemoteImages(urls: string[]): Promise<RemoteImageResult[]> {
   const results: RemoteImageResult[] = []
-  // 分批下载、压缩、上传，避免同时持有 30 张大图及其 Base64 副本。
-  for (let index = 0; index < urls.length; index += 2) {
-    const downloadedResults = await Promise.all(urls.slice(index, index + 2).map(url => downloadRemoteImage(url, target)))
+  const signal = AbortSignal.timeout(240_000)
+  const storage = getStorageProvider(signal)
+  // 同时只解码两张原图；四张处理后的图片共用一次图床提交。
+  for (let index = 0; index < urls.length; index += 4) {
+    const downloadedResults: (DownloadedRemoteImage | RemoteImageResult)[] = []
+    for (let offset = index; offset < Math.min(index + 4, urls.length); offset += 2) {
+      downloadedResults.push(...await Promise.all(urls.slice(offset, Math.min(offset + 2, index + 4)).map(url => downloadRemoteImage(url, storage, signal))))
+    }
     const completedDownloads = downloadedResults.filter(isRemoteImageResult)
     const downloadedImages = downloadedResults.filter(
       (result): result is DownloadedRemoteImage => !isRemoteImageResult(result),
     )
-    results.push(...completedDownloads, ...await uploadDownloadedImages(downloadedImages, target))
+    results.push(...completedDownloads, ...await uploadDownloadedImages(downloadedImages, storage))
   }
   return results
 }
@@ -166,15 +177,22 @@ export const Route = createFileRoute('/api/upload/remote-images')({
     handlers: {
       POST: async ({ request }) => {
         try {
-          const body = await request.json()
+          const bytes = await readLimitedBody(request, 128 * 1024, '图片链接请求过大')
+          const body: unknown = JSON.parse(new TextDecoder().decode(bytes))
           const parsed = remoteImagesSchema.parse(body)
           const urls = Array.from(new Set(parsed.urls))
 
-          const results = await migrateRemoteImages(urls, parsed.target)
+          const results = await migrateRemoteImages(urls)
 
           return Response.json({ results })
         }
         catch (error) {
+          if (error instanceof ImageProcessingError) {
+            return Response.json({ error: error.message }, { status: error.status })
+          }
+          if (error instanceof SyntaxError) {
+            return Response.json({ error: '请求数据格式错误' }, { status: 400 })
+          }
           console.error('Remote images upload error:', error)
 
           if (error && typeof error === 'object' && 'issues' in error) {

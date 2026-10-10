@@ -35,7 +35,7 @@ export const Route = createFileRoute('/api/proxy/image')({
             )
           }
 
-          const buffer = await readLimitedBody(response, MAX_UPLOAD_IMAGE_BYTES, '图片代理上限为 10MB，请先使用一键上传压缩图片')
+          const buffer = await readLimitedBody(response, MAX_UPLOAD_IMAGE_BYTES, '图片超过代理上限，请先使用一键上传压缩至 5MB 以下')
 
           const headerContentType = response.headers.get('content-type')?.split(';').at(0)?.trim() || ''
           const contentType = headerContentType.startsWith('image/')

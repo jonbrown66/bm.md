@@ -1,46 +1,51 @@
-import type { ImageUploadTarget } from './image-upload-policy'
 import type { StorageProvider, UploadOptions, UploadResult } from '@/storage/types'
 import { detectImageContentType } from './image-content'
 import {
   ImageProcessingError,
   MAX_SOURCE_IMAGE_BYTES,
   MAX_UPLOAD_IMAGE_BYTES,
-  MAX_WECHAT_IMAGE_BYTES,
   SOURCE_IMAGE_SIZE_ERROR,
 } from './image-upload-policy'
 
 /** 单帧图片最大像素（约 4000 万像素，如 8000x5000）。 */
 const maxFramePixels = 40_000_000
-/** 动图总像素上限（动图包含全部帧，放宽至 5 亿像素，可容纳 2K 分辨率 160+ 帧的高清动图）。 */
-const maxAnimatedTotalPixels = 500_000_000
+/** 限制全部动画帧的解码量，避免多图并发耗尽服务端内存。 */
+const maxAnimatedTotalPixels = 120_000_000
 const maxCachedCopies = 128
 const copyCacheLifetime = 10 * 60 * 1000
 const uploadedCopies = new Map<string, { url: string, expiresAt: number }>()
 const pendingCopies = new Map<string, Promise<UploadResult>>()
 const uploadQueues = new Map<string, Promise<void>>()
 
-/** 按输出内容复用成功副本，并合并同一副本的并发上传。 */
-export async function uploadPreparedWechatImage(options: UploadOptions, storage: StorageProvider): Promise<UploadResult> {
+/** 同内容合并上传，新增图片批量提交；缓存只记录成功结果。 */
+export async function uploadPreparedImages(options: UploadOptions[], storage: StorageProvider): Promise<PromiseSettledResult<UploadResult>[]> {
   const scope = storage.cacheScope
   if (!scope) {
-    return storage.upload(options)
+    return Promise.allSettled(options.map(image => storage.upload(image)))
   }
-  const digest = await crypto.subtle.digest('SHA-256', await options.file.arrayBuffer())
-  const hash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
-  const key = JSON.stringify([scope, options.contentType, hash])
-  const cached = uploadedCopies.get(key)
-  if (cached && cached.expiresAt > Date.now()) {
-    return { url: cached.url }
+  const owned: { key: string, image: UploadOptions, resolve: (result: UploadResult) => void, reject: (error: unknown) => void }[] = []
+  const jobs = await Promise.all(options.map(async (image) => {
+    const digest = await crypto.subtle.digest('SHA-256', await image.file.arrayBuffer())
+    const hash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
+    const key = JSON.stringify([scope, image.contentType, hash])
+    const cached = uploadedCopies.get(key)
+    if (cached && cached.expiresAt > Date.now()) {
+      return { promise: Promise.resolve({ url: cached.url }) }
+    }
+    uploadedCopies.delete(key)
+    const pending = pendingCopies.get(key)
+    if (pending) {
+      return { promise: pending }
+    }
+    const promise = new Promise<UploadResult>((resolve, reject) => owned.push({ key, image, resolve, reject }))
+    pendingCopies.set(key, promise)
+    return { promise }
+  }))
+  const results = Promise.allSettled(jobs.map(job => job.promise))
+  if (!owned.length) {
+    return results
   }
-  uploadedCopies.delete(key)
-  const pending = pendingCopies.get(key)
-  if (pending) {
-    return pending
-  }
-
-  // 同一图床的新增副本串行提交，避免 GitHub 分支同时写入产生冲突。
-  const previous = uploadQueues.get(scope) ?? Promise.resolve()
-  const upload = previous.then(() => storage.upload(options)).then((result) => {
+  const finish = (job: typeof owned[number], result: UploadResult) => {
     if (!result.url) {
       throw new ImageProcessingError('存储服务未返回图片链接', 500)
     }
@@ -50,20 +55,60 @@ export async function uploadPreparedWechatImage(options: UploadOptions, storage:
         uploadedCopies.delete(oldestKey)
       }
     }
-    uploadedCopies.set(key, { url: result.url, expiresAt: Date.now() + copyCacheLifetime })
-    return result
-  }).finally(() => {
-    pendingCopies.delete(key)
+    uploadedCopies.set(job.key, { url: result.url, expiresAt: Date.now() + copyCacheLifetime })
+    job.resolve(result)
+  }
+  const previous = uploadQueues.get(scope) ?? Promise.resolve()
+  const settled = previous.then(async () => {
+    try {
+      if (owned.length > 1 && storage.uploadMany) {
+        const uploaded = await storage.uploadMany(owned.map(job => job.image))
+        if (uploaded.length !== owned.length || uploaded.some(result => !result.url)) {
+          throw new ImageProcessingError('存储服务未返回完整图片链接', 500)
+        }
+        owned.forEach((job, index) => finish(job, uploaded[index]))
+      }
+      else {
+        for (const job of owned) {
+          try {
+            finish(job, await storage.upload(job.image))
+          }
+          catch (error) {
+            job.reject(error)
+          }
+        }
+      }
+    }
+    catch {
+      // 批量提交失败时逐项恢复，避免单张错误丢掉其他图片的成功结果。
+      for (const job of owned) {
+        try {
+          finish(job, await storage.upload(job.image))
+        }
+        catch (failure) {
+          job.reject(failure)
+        }
+      }
+    }
+    finally {
+      owned.forEach(job => pendingCopies.delete(job.key))
+    }
   })
-  pendingCopies.set(key, upload)
-  const settled = upload.then(() => undefined, () => undefined)
   uploadQueues.set(scope, settled)
   void settled.then(() => {
     if (uploadQueues.get(scope) === settled) {
       uploadQueues.delete(scope)
     }
   })
-  return upload
+  return results
+}
+
+export async function uploadPreparedImage(options: UploadOptions, storage: StorageProvider): Promise<UploadResult> {
+  const [result] = await uploadPreparedImages([options], storage)
+  if (result.status === 'rejected') {
+    throw result.reason
+  }
+  return result.value
 }
 
 /** libvips 不支持 APNG 动画解码，必须在转换前识别，防止丢帧。 */
@@ -83,24 +128,16 @@ function isAnimatedPng(bytes: Uint8Array): boolean {
   return false
 }
 
-export async function prepareUploadImage(options: UploadOptions, target: ImageUploadTarget = 'default'): Promise<UploadOptions> {
-  const wechat = target === 'wechat'
-  const maxBytes = wechat ? MAX_WECHAT_IMAGE_BYTES : MAX_UPLOAD_IMAGE_BYTES
-  const sizeLabel = wechat ? '5MB' : '10MB'
+export async function prepareUploadImage(options: UploadOptions): Promise<UploadOptions> {
+  const maxBytes = MAX_UPLOAD_IMAGE_BYTES
+  const sizeLabel = '5MB 以下'
   if (options.file.size > MAX_SOURCE_IMAGE_BYTES) {
     throw new ImageProcessingError(SOURCE_IMAGE_SIZE_ERROR, 413)
   }
-  if (!wechat && options.file.size <= maxBytes) {
-    return options
-  }
-
   const bytes = new Uint8Array(await options.file.arrayBuffer())
   const type = detectImageContentType(bytes)
-  if (wechat && options.file.size <= maxBytes && ['image/jpeg', 'image/png', 'image/gif'].includes(type ?? '')) {
-    return options
-  }
   if (type === 'image/png' && isAnimatedPng(bytes)) {
-    throw new ImageProcessingError(`APNG 动图超过 ${sizeLabel}，暂不支持保留动画压缩，请先手动压缩`)
+    throw new ImageProcessingError('暂不支持 APNG 动图，请先转换为 GIF，避免动画丢帧')
   }
   // 仅转换可确认动画特性的格式，避免将 SVG 动画或 AVIF 序列转成静态图。
   if (!type) {
@@ -108,9 +145,13 @@ export async function prepareUploadImage(options: UploadOptions, target: ImageUp
   }
 
   try {
-    // 仅在服务端确需压缩时加载原生模块，小图直接沿用原始字节。
+    // 元数据校验不会重新编码小图；确需转换时才执行压缩。
     const { default: sharp } = await import('sharp')
+    sharp.cache({ memory: 32, files: 0, items: 20 })
     const metadata = await sharp(bytes, { limitInputPixels: maxAnimatedTotalPixels }).metadata()
+    if (options.file.size <= maxBytes && ['image/jpeg', 'image/png', 'image/gif'].includes(type)) {
+      return { ...options, contentType: type, filename: `${options.filename.replace(/\.[^.]*$/, '') || 'image'}.${type === 'image/jpeg' ? 'jpg' : type.split('/')[1]}` }
+    }
     const pages = metadata.pages ?? 1
     const width = metadata.width
     const height = metadata.pageHeight ?? metadata.height
@@ -119,20 +160,18 @@ export async function prepareUploadImage(options: UploadOptions, target: ImageUp
       throw new ImageProcessingError('图片单帧分辨率过大（超过 4000 万像素），请先缩小图片尺寸')
     }
     if (pages > 1 && framePixels * pages > maxAnimatedTotalPixels) {
-      throw new ImageProcessingError('动图总像素超过 5 亿（动图包含全部帧），请先缩小动图尺寸或减少帧数')
+      throw new ImageProcessingError('动图全部帧超过 1.2 亿像素，请先缩小动图尺寸或减少帧数')
     }
 
     const animated = pages > 1
-    const format = wechat
-      ? (animated ? 'gif' : metadata.hasAlpha ? 'png' : 'jpg')
-      : (animated || metadata.hasAlpha ? 'webp' : 'jpg')
+    const format = animated ? 'gif' : metadata.hasAlpha ? 'png' : 'jpg'
     const contentType = `image/${format === 'jpg' ? 'jpeg' : format}`
     const deadline = Date.now() + 30_000
 
     const orientedWidth = !animated && (metadata.orientation ?? 0) >= 5 ? height : width
     const orientedHeight = !animated && (metadata.orientation ?? 0) >= 5 ? width : height
 
-    // 微信公众号文章内容区域宽度不超过 677px。对于超大尺寸动图，按公众号适宜尺寸梯度递减，避免原尺寸计算超时或体积过大。
+    // 大动图先缩至适合文章展示的宽度，减少编码耗时。
     const maxAnimatedGifWidth = 900
     const gifStartScale = (animated && format === 'gif' && orientedWidth > maxAnimatedGifWidth)
       ? (maxAnimatedGifWidth / orientedWidth)
@@ -149,14 +188,15 @@ export async function prepareUploadImage(options: UploadOptions, target: ImageUp
         ]
       : [
           { scale: 1, quality: 90 },
-          ...(['jpg', 'webp'].includes(format)
+          ...(format === 'jpg'
             ? [{ scale: 1, quality: 80 }, { scale: 1, quality: 70 }]
             : []),
           { scale: 0.8, quality: 75 },
           { scale: 0.6, quality: 75 },
           { scale: 0.4, quality: 75 },
           { scale: 0.25, quality: 75 },
-          ...(wechat ? [{ scale: 0.15, quality: 75 }, { scale: 0.1, quality: 75 }] : []),
+          { scale: 0.15, quality: 75 },
+          { scale: 0.1, quality: 75 },
         ]
 
     for (const { scale, quality } of attempts) {
@@ -168,22 +208,19 @@ export async function prepareUploadImage(options: UploadOptions, target: ImageUp
       if (!animated) {
         pipeline = pipeline.rotate()
       }
-      const maxDimension = format === 'webp' ? 16383 : 65500
+      const maxDimension = 65500
       pipeline = pipeline.resize({
         width: Math.min(maxDimension, Math.max(1, Math.floor(orientedWidth * scale))),
         height: Math.min(maxDimension, Math.max(1, Math.floor(orientedHeight * scale))),
         fit: 'inside',
         withoutEnlargement: true,
       })
-      if (format === 'webp') {
-        pipeline = pipeline.webp({ quality, alphaQuality: 100, effort: 3, loop: metadata.loop, delay: metadata.delay })
-      }
-      else if (format === 'gif') {
+      if (format === 'gif') {
         pipeline = pipeline.gif({ effort: 3, loop: metadata.loop, delay: metadata.delay })
       }
       else if (format === 'png') {
         // PNG 使用无损压缩，尺寸不足时再缩图，保留完整透明通道。
-        pipeline = pipeline.png({ compressionLevel: 9 })
+        pipeline = pipeline.png({ compressionLevel: 6 })
       }
       else {
         pipeline = pipeline.jpeg({ quality, chromaSubsampling: '4:4:4' })
@@ -198,32 +235,6 @@ export async function prepareUploadImage(options: UploadOptions, target: ImageUp
           filename: `${options.filename.replace(/\.[^.]*$/, '') || 'image'}.${format}`,
           contentType,
         }
-      }
-    }
-
-    // 若动图在多次缩放后仍无法在保留动画时压至 5MB，保底转为首帧静态图压缩至 5MB 以下，确保公众号发布不被阻塞。
-    if (animated && wechat) {
-      try {
-        const fallbackPipeline = sharp(bytes, { limitInputPixels: maxAnimatedTotalPixels })
-          .rotate()
-          .resize({
-            width: Math.min(1920, orientedWidth),
-            height: Math.min(1920, orientedHeight),
-            fit: 'inside',
-            withoutEnlargement: true,
-          })
-          .jpeg({ quality: 80, chromaSubsampling: '4:4:4' })
-        const fallbackOutput = await fallbackPipeline.timeout({ seconds: 5 }).toBuffer()
-        if (fallbackOutput.byteLength <= maxBytes) {
-          return {
-            file: new Blob([new Uint8Array(fallbackOutput)], { type: 'image/jpeg' }),
-            filename: `${options.filename.replace(/\.[^.]*$/, '') || 'image'}.jpg`,
-            contentType: 'image/jpeg',
-          }
-        }
-      }
-      catch {
-        // 保底处理异常时继续向下抛出错误
       }
     }
 

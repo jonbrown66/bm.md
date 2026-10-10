@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   buildGitHubImageKey,
@@ -89,9 +90,10 @@ describe('github storage helpers', () => {
       filename: 'cover.png',
       contentType: 'image/png',
     })
+    const key = `images/v2/${createHash('sha256').update('hello').digest('hex')}.png`
 
     expect(fetchMock).toHaveBeenCalledWith(
-      'https://api.github.com/repos/jonbrown66/imagebad/contents/images/2026-06-19/image-id.png',
+      `https://api.github.com/repos/jonbrown66/imagebad/contents/${key}`,
       expect.objectContaining({
         method: 'PUT',
         headers: expect.objectContaining({
@@ -99,13 +101,13 @@ describe('github storage helpers', () => {
           'Content-Type': 'application/json',
         }),
         body: JSON.stringify({
-          message: 'upload image images/2026-06-19/image-id.png',
+          message: `upload image ${key}`,
           content: 'aGVsbG8=',
           branch: 'main',
         }),
       }),
     )
-    expect(result.url).toBe('https://img.example.com/images/2026-06-19/image-id.png')
+    expect(result.url).toBe(`https://img.example.com/${key}`)
   })
 
   it('uploads multiple images with one tree commit', async () => {
@@ -146,6 +148,8 @@ describe('github storage helpers', () => {
         contentType: 'image/jpeg',
       },
     ])
+    const firstKey = `images/v2/${createHash('sha256').update('first').digest('hex')}.png`
+    const secondKey = `images/v2/${createHash('sha256').update('second').digest('hex')}.jpg`
 
     expect(fetchMock).toHaveBeenCalledTimes(7)
     expect(fetchMock).toHaveBeenNthCalledWith(
@@ -157,13 +161,13 @@ describe('github storage helpers', () => {
           base_tree: 'base-tree-sha',
           tree: [
             {
-              path: 'images/2026-06-19/first-id.png',
+              path: firstKey,
               mode: '100644',
               type: 'blob',
               sha: 'blob-sha-1',
             },
             {
-              path: 'images/2026-06-19/second-id.jpg',
+              path: secondKey,
               mode: '100644',
               type: 'blob',
               sha: 'blob-sha-2',
@@ -184,8 +188,78 @@ describe('github storage helpers', () => {
       }),
     )
     expect(results.map(result => result.url)).toEqual([
-      'https://img.example.com/images/2026-06-19/first-id.png',
-      'https://img.example.com/images/2026-06-19/second-id.jpg',
+      `https://img.example.com/${firstKey}`,
+      `https://img.example.com/${secondKey}`,
     ])
+  })
+
+  function configure() {
+    process.env.GITHUB_IMAGE_TOKEN = 'test-token'
+    process.env.GITHUB_IMAGE_OWNER = 'example'
+    process.env.GITHUB_IMAGE_REPO = 'images'
+  }
+  it('recognizes only current-policy content-addressed URLs from this destination', () => {
+    configure()
+    const storage = new GitHubStorage()
+    const url = `https://raw.githubusercontent.com/example/images/main/images/v2/${'a'.repeat(64)}.gif`
+    expect(storage.isUploadedImageUrl(url)).toBe(true)
+    expect(storage.isUploadedImageUrl(url.replace('/example/', '/other/'))).toBe(false)
+    expect(storage.isUploadedImageUrl(`${url}?original=1`)).toBe(false)
+    expect(storage.isUploadedImageUrl(url.replace('/v2/', '/2026-10-10/'))).toBe(false)
+  })
+  it('reuses an existing identical image after an uncertain request without overwriting other content', async () => {
+    configure()
+    const request = vi.fn().mockResolvedValueOnce(new Response('{}', { status: 422 })).mockResolvedValueOnce(Response.json({ sha: 'b6fc4c620b67d95f953a5c1c1230aaab5db5a1b0' }))
+    vi.stubGlobal('fetch', request)
+    const result = await new GitHubStorage().upload({ file: new Blob(['hello']), filename: 'renamed.png', contentType: 'image/png' })
+    expect(result.url).toContain('/images/v2/')
+    expect(request.mock.calls.filter(([, init]) => init.method === 'PUT')).toHaveLength(1)
+    request.mockReset().mockResolvedValueOnce(new Response('{}', { status: 422 })).mockResolvedValueOnce(Response.json({ sha: 'different-content' }))
+    await expect(new GitHubStorage().upload({ file: new Blob(['hello']), filename: 'renamed.png', contentType: 'image/png' })).rejects.toThrow('422')
+  })
+  it('rebases a conflicting batch onto the latest head while reusing blobs and preserving unrelated files', async () => {
+    configure()
+    let heads = 0
+    let patches = 0
+    const request = vi.fn().mockImplementation(async (url: string, init: RequestInit) => {
+      if (url.includes('git/ref/heads/'))
+        return Response.json({ object: { sha: `head-${++heads}` } })
+      if (url.includes('git/commits/') && !init.method)
+        return Response.json({ tree: { sha: `tree-${heads}` } })
+      if (url.endsWith('git/blobs'))
+        return Response.json({ sha: 'blob' })
+      if (url.endsWith('git/trees'))
+        return Response.json({ sha: 'new-tree' })
+      if (url.endsWith('git/commits'))
+        return Response.json({ sha: 'new-commit' })
+      if (init.method === 'PATCH')
+        return new Response('{}', { status: ++patches === 1 ? 409 : 200 })
+      throw new Error('unexpected request')
+    })
+    vi.stubGlobal('fetch', request)
+    const result = await new GitHubStorage().uploadMany(['first', 'second'].map(value => ({ file: new Blob([value]), filename: `${value}.png`, contentType: 'image/png' })))
+    expect(result).toHaveLength(2)
+    expect(request.mock.calls.filter(([url]) => url.endsWith('git/blobs'))).toHaveLength(2)
+    expect(request.mock.calls.filter(([url]) => url.endsWith('git/trees')).map(([, init]) => JSON.parse(init.body).base_tree)).toEqual(['tree-1', 'tree-2'])
+    expect(request.mock.calls.filter(([, init]) => init.method === 'PATCH').every(([, init]) => JSON.parse(init.body).force === false)).toBe(true)
+  })
+  it('retries a single-image branch conflict when another writer changed the head before this file existed', async () => {
+    configure()
+    const request = vi.fn().mockResolvedValueOnce(new Response('{}', { status: 409 })).mockResolvedValueOnce(new Response('{}', { status: 404 })).mockResolvedValueOnce(Response.json({ content: { download_url: 'https://images.example/new.png' } }))
+    vi.stubGlobal('fetch', request)
+    await expect(new GitHubStorage().upload({ file: new Blob(['hello']), filename: 'hello.png', contentType: 'image/png' })).resolves.toMatchObject({ url: expect.stringContaining('/images/v2/') })
+    expect(request).toHaveBeenCalledTimes(3)
+    expect(request.mock.calls[0][0]).toBe(request.mock.calls[2][0])
+    expect(request.mock.calls[0][1].body).toBe(request.mock.calls[2][1].body)
+  })
+  it('retries temporary GitHub failures and stops immediately on authentication errors', async () => {
+    configure()
+    const request = vi.fn().mockResolvedValueOnce(new Response('{}', { status: 503 })).mockResolvedValueOnce(Response.json({ sha: 'a'.repeat(40) }))
+    vi.stubGlobal('fetch', request)
+    await expect(new GitHubStorage().createUploadBlob(new Uint8Array([1]))).resolves.toBe('a'.repeat(40))
+    expect(request).toHaveBeenCalledTimes(2)
+    request.mockReset().mockResolvedValue(new Response('{}', { status: 401 }))
+    await expect(new GitHubStorage().createUploadBlob(new Uint8Array([1]))).rejects.toThrow('401')
+    expect(request).toHaveBeenCalledOnce()
   })
 })

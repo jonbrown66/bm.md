@@ -25,6 +25,6 @@ export function isS3Configured(): boolean {
 }
 
 /** 获取存储提供商实例 */
-export function getStorageProvider(): StorageProvider {
-  return new GitHubStorage()
+export function getStorageProvider(signal?: AbortSignal): StorageProvider {
+  return new GitHubStorage(signal)
 }

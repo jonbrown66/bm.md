@@ -2,6 +2,7 @@ import { EditorView, ViewPlugin } from '@codemirror/view'
 import { toast } from 'sonner'
 import { importFilesAsNewTabs, isImageFile, isTextFile } from '@/lib/file-importer'
 import { uploadImage } from '@/services/upload'
+import { useFilesStore } from '@/stores/files'
 
 let currentEditorView: EditorView | null = null
 
@@ -57,6 +58,7 @@ export async function importFilesToEditor(
 
   const { insertPos, replaceAll = false } = options
   const selection = view.state.selection.main
+  const fileId = useFilesStore.getState().activeFileId
   let currentInsertPos = insertPos ?? selection.from
 
   for (const file of files) {
@@ -108,18 +110,24 @@ export async function importFilesToEditor(
         formData.append('name', file.name)
         const result = await uploadImage(formData)
 
+        if (useFilesStore.getState().activeFileId !== fileId || !view.dom.isConnected) {
+          toast.warning(`图片已上传：${file.name}，编辑文档已切换，未插入当前文档`, { id: toastId })
+          return
+        }
+
         const imageMarkdown = `\n![${file.name}](${result.url})\n`
 
+        const position = Math.max(0, Math.min(currentInsertPos, view.state.doc.length))
         view.dispatch({
-          changes: { from: currentInsertPos, insert: imageMarkdown },
-          selection: { anchor: currentInsertPos + imageMarkdown.length },
+          changes: { from: position, insert: imageMarkdown },
+          selection: { anchor: position + imageMarkdown.length },
         })
-        currentInsertPos += imageMarkdown.length
+        currentInsertPos = position + imageMarkdown.length
         toast.success(`图片上传成功: ${file.name}`, { id: toastId })
       }
-      catch (error: any) {
+      catch (error) {
         console.error('Image upload error:', error)
-        toast.error(error.message || `图片上传失败: ${file.name}`, { id: toastId })
+        toast.error(error instanceof Error ? error.message : `图片上传失败: ${file.name}`, { id: toastId })
       }
       continue
     }

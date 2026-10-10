@@ -1,7 +1,9 @@
-export const MAX_UPLOAD_IMAGE_BYTES = 10 * 1024 * 1024
-/** 公众号复制使用独立的 5MB 上限。 */
-export const MAX_WECHAT_IMAGE_BYTES = 5 * 1024 * 1024
-export type ImageUploadTarget = 'default' | 'wechat'
+/** 最终图片控制在 4MiB，低于微信 5MB，也为 Vercel 的 4.5MB 请求上限留出余量。 */
+export const MAX_UPLOAD_IMAGE_BYTES = 4 * 1024 * 1024
+export const MAX_UPLOAD_REQUEST_BYTES = MAX_UPLOAD_IMAGE_BYTES + 64 * 1024
+export const UPLOAD_PART_BYTES = 2 * 1024 * 1024
+export const MAX_REMOTE_IMAGE_COUNT = 30
+export const REMOTE_UPLOAD_BATCH_SIZE = 6
 export const MAX_SOURCE_IMAGE_BYTES = 50 * 1024 * 1024
 export const SOURCE_IMAGE_SIZE_ERROR = '原始图片不能超过 50MB，请先缩小图片'
 

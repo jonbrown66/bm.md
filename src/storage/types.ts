@@ -30,6 +30,11 @@ export interface StorageProvider {
   upload: (options: UploadOptions) => Promise<UploadResult>
   /** 批量上传文件 */
   uploadMany?: (options: UploadOptions[]) => Promise<UploadResult[]>
+  /** 大文件传输使用的未提交 Git blob，不公开图床凭证。 */
+  createUploadBlob?: (bytes: Uint8Array) => Promise<string>
+  readUploadBlob?: (sha: string) => Promise<ArrayBuffer>
+  /** 判断本图床已经按当前策略处理过的内容寻址图片。 */
+  isUploadedImageUrl?: (url: string) => boolean
 }
 
 /** 存储错误类，包含 provider 标识 */

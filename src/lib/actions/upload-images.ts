@@ -1,5 +1,6 @@
 import { createElement } from 'react'
 import { toast } from 'sonner'
+import { REMOTE_UPLOAD_BATCH_SIZE } from '@/lib/image-upload-policy'
 import {
   extractRemoteImageReferences,
   replaceImageUrls,
@@ -44,7 +45,7 @@ export function getUploadProgressMessage(phase: UploadProgressPhase, count: numb
   }
 
   if (phase === 'commit') {
-    return '正在处理并上传图片，超过 10MB 将自动压缩...'
+    return '正在处理并上传图片，自动压缩至 5MB 以下...'
   }
 
   return `正在重试 ${count} 张失败图片...`
@@ -71,13 +72,21 @@ async function uploadImageUrls(urls: string[], toastId: string | number, retry =
     { id: toastId },
   )
 
-  const uploadPromise = uploadRemoteImages(urls)
-
-  queueMicrotask(() => {
-    toast.loading(getUploadProgressMessage('commit', urls.length), { id: toastId })
-  })
-
-  return await uploadPromise
+  const results: UploadImagesResult[] = []
+  for (let index = 0; index < urls.length; index += REMOTE_UPLOAD_BATCH_SIZE) {
+    const batch = urls.slice(index, index + REMOTE_UPLOAD_BATCH_SIZE)
+    toast.loading(`正在处理并上传图片 ${index + 1}–${index + batch.length}/${urls.length}，单张低于 5MB...`, { id: toastId })
+    try {
+      const response = await uploadRemoteImages(batch)
+      // 未返回的结果也作为失败项，避免请求中断后遗漏图片。
+      results.push(...batch.map(oldUrl => response.results.find(result => result.oldUrl === oldUrl)
+        ?? { oldUrl, status: 'failed' as const, error: '上传未返回结果，请重试' }))
+    }
+    catch (error) {
+      results.push(...batch.map(oldUrl => ({ oldUrl, status: 'failed' as const, error: error instanceof Error ? error.message : '图片上传失败' })))
+    }
+  }
+  return { results }
 }
 
 function showUploadFailuresToast(options: {
@@ -122,6 +131,7 @@ function showUploadFailuresToast(options: {
 export async function uploadMarkdownImages(
   content: string,
   setContent: (content: string) => void,
+  getContent?: () => string | undefined,
 ) {
   const urls = extractRemoteImageReferences(content)
 
@@ -132,6 +142,14 @@ export async function uploadMarkdownImages(
 
   const toastId = toast.loading(getUploadProgressMessage('download', urls.length))
   let latestContent = content
+  const applyReplacements = (successful: { oldUrl: string, newUrl: string }[]) => {
+    const current = getContent ? getContent() : latestContent
+    if (current === undefined) {
+      throw new Error('图片已上传，但文档已切换，未修改当前文档；返回原文档后可再次一键上传')
+    }
+    latestContent = replaceImageUrls(current, successful)
+    setContent(latestContent)
+  }
 
   const retryFailedUrls = async (failedUrls: string[]) => {
     try {
@@ -139,8 +157,7 @@ export async function uploadMarkdownImages(
       const successful = getSuccessfulImageReplacements(results)
 
       if (successful.length > 0) {
-        latestContent = replaceImageUrls(latestContent, successful)
-        setContent(latestContent)
+        applyReplacements(successful)
       }
 
       const failedAgainUrls = getFailedImageUrls(results)
@@ -170,8 +187,7 @@ export async function uploadMarkdownImages(
     const successful = getSuccessfulImageReplacements(results)
 
     if (successful.length > 0) {
-      latestContent = replaceImageUrls(latestContent, successful)
-      setContent(latestContent)
+      applyReplacements(successful)
     }
 
     const failedUrls = getFailedImageUrls(results)

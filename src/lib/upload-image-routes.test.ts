@@ -4,10 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Route as proxyRoute } from '@/routes/api.proxy.image'
 import { Route as imageRoute } from '@/routes/api.upload.image'
 import { Route as remoteRoute } from '@/routes/api.upload.remote-images'
-import { MAX_SOURCE_IMAGE_BYTES, MAX_UPLOAD_IMAGE_BYTES, MAX_WECHAT_IMAGE_BYTES } from './image-upload-policy'
-import { uploadPreparedWechatImage } from './prepare-upload-image.server'
+import { MAX_SOURCE_IMAGE_BYTES, MAX_UPLOAD_IMAGE_BYTES, MAX_UPLOAD_REQUEST_BYTES, UPLOAD_PART_BYTES } from './image-upload-policy'
+import { uploadPreparedImage } from './prepare-upload-image.server'
 
-const storage = vi.hoisted(() => ({ type: 'github' as const, upload: vi.fn(), uploadMany: vi.fn(), cacheScope: 'initial' }))
+const storage = vi.hoisted(() => ({ type: 'github' as const, upload: vi.fn(), uploadMany: vi.fn(), cacheScope: 'initial', createUploadBlob: vi.fn(), readUploadBlob: vi.fn(), isUploadedImageUrl: vi.fn() }))
 let storageScopeIndex = 0
 vi.mock('@/storage', async importOriginal => ({
   ...await importOriginal<typeof import('@/storage')>(),
@@ -32,20 +32,87 @@ beforeEach(() => {
   storage.upload.mockReset().mockResolvedValue({ url: 'https://images.example/uploaded.png' })
   storage.uploadMany.mockReset().mockImplementation(async (images: UploadOptions[]) =>
     images.map(image => ({ url: `https://images.example/${image.filename}` })))
+  storage.isUploadedImageUrl.mockReset().mockReturnValue(false)
+  storage.createUploadBlob.mockReset()
+  storage.readUploadBlob.mockReset()
 })
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.unstubAllEnvs()
+})
 
 describe('image upload routes', () => {
+  it('reuses an already processed image URL without downloading or committing it', async () => {
+    storage.isUploadedImageUrl.mockReturnValue(true)
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    const url = 'https://images.example/v2/already.gif'
+    const response = await migrate({ request: remoteRequest([url]) })
+    expect((await response.json()).results[0]).toMatchObject({ oldUrl: url, newUrl: url, status: 'success' })
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(storage.upload).not.toHaveBeenCalled()
+    expect(storage.uploadMany).not.toHaveBeenCalled()
+  })
+  it('uploads a large animated image through bounded requests and preserves all frames after assembly', async () => {
+    vi.stubEnv('GITHUB_IMAGE_TOKEN', 'unit-test-signing-key')
+    const animation = new Uint8Array(24)
+    animation.fill(255, 0, 12)
+    const gif = await sharp(animation, { raw: { width: 2, height: 4, channels: 3, pageHeight: 2 } }).gif({ delay: [100, 200], loop: 2 }).toBuffer()
+    const source = new Uint8Array(MAX_UPLOAD_IMAGE_BYTES + 100)
+    source.set(gif)
+    const blobs = new Map<string, Uint8Array>()
+    storage.createUploadBlob.mockImplementation(async (bytes: Uint8Array) => {
+      const sha = (blobs.size + 1).toString(16).padStart(40, '0')
+      blobs.set(sha, bytes)
+      return sha
+    })
+    storage.readUploadBlob.mockImplementation(async sha => new Uint8Array(blobs.get(sha)!).buffer)
+    const receipts: string[] = []
+    for (let offset = 0; offset < source.length; offset += UPLOAD_PART_BYTES) {
+      const form = new FormData()
+      form.set('action', 'part')
+      form.set('file', new Blob([source.slice(offset, offset + UPLOAD_PART_BYTES)]))
+      form.set('metadata', JSON.stringify({ id: 'be063ba7-f0e3-4474-9861-91519ac3ac5e', index: receipts.length, totalSize: source.length }))
+      const request = new Request('http://localhost/api/upload/image', { method: 'POST', body: form })
+      expect((await request.clone().arrayBuffer()).byteLength).toBeLessThan(MAX_UPLOAD_REQUEST_BYTES)
+      const response = await upload({ request })
+      expect(response.status).toBe(200)
+      receipts.push((await response.json()).receipt)
+    }
+    expect(storage.upload).not.toHaveBeenCalled()
+    const final = await upload({ request: new Request('http://localhost/api/upload/image', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'large.gif', contentType: 'image/gif', parts: receipts }),
+    }) })
+    expect(final.status).toBe(200)
+    const output = storage.upload.mock.calls[0][0] as UploadOptions
+    expect(output.file.size).toBeLessThanOrEqual(MAX_UPLOAD_IMAGE_BYTES)
+    expect(output.contentType).toBe('image/gif')
+    expect(await sharp(await output.file.arrayBuffer(), { animated: true }).metadata()).toMatchObject({ pages: 2, delay: [100, 200], loop: 2 })
+  })
+  it('retries a transient download error while leaving permanent errors for manual retry', async () => {
+    const png = await sharp({ create: { width: 2, height: 2, channels: 3, background: 'red' } }).png().toBuffer()
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response('{}', { status: 503 })).mockResolvedValueOnce(new Response(new Uint8Array(png), { headers: { 'content-type': 'image/png' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    const response = await migrate({ request: remoteRequest(['https://example.com/transient.png']) })
+    expect((await response.json()).results[0].status).toBe('success')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    fetchMock.mockReset().mockResolvedValue(new Response('{}', { status: 403 }))
+    const blocked = await migrate({ request: remoteRequest(['https://example.com/blocked.png']) })
+    expect((await blocked.json()).results[0].status).toBe('failed')
+    expect(fetchMock).toHaveBeenCalledOnce()
+  })
   it('expires successful copies so they can be regenerated after ten minutes', async () => {
     let now = 1_000_000
     const clock = vi.spyOn(Date, 'now').mockImplementation(() => now)
     const image = { file: new Blob(['prepared']), filename: 'copy.png', contentType: 'image/png' }
     try {
-      await uploadPreparedWechatImage(image, storage)
-      await uploadPreparedWechatImage(image, storage)
+      await uploadPreparedImage(image, storage)
+      await uploadPreparedImage(image, storage)
       expect(storage.upload).toHaveBeenCalledOnce()
       now += 10 * 60 * 1000 + 1
-      await uploadPreparedWechatImage(image, storage)
+      await uploadPreparedImage(image, storage)
       expect(storage.upload).toHaveBeenCalledTimes(2)
     }
     finally {
@@ -57,26 +124,26 @@ describe('image upload routes', () => {
     const image = { file: new Blob(['prepared']), filename: 'copy.png', contentType: 'image/png' }
     storage.upload.mockResolvedValueOnce({ url: 'https://images.example/first-repo.png' })
       .mockResolvedValueOnce({ url: 'https://images.example/second-repo.png' })
-    const first = await uploadPreparedWechatImage(image, storage)
+    const first = await uploadPreparedImage(image, storage)
     storage.cacheScope += '-second-repo'
-    const second = await uploadPreparedWechatImage(image, storage)
+    const second = await uploadPreparedImage(image, storage)
     expect(first.url).not.toBe(second.url)
     expect(storage.upload).toHaveBeenCalledTimes(2)
   })
 
-  it('reuses a compatible original WeChat image without writing to storage', async () => {
+  it('migrates compatible images at upload time instead of relying on copy-time processing', async () => {
     const png = await sharp({ create: { width: 32, height: 32, channels: 3, background: 'red' } }).png().toBuffer()
     vi.stubGlobal('fetch', vi.fn().mockImplementation(() => new Response(new Uint8Array(png), { headers: { 'content-type': 'image/png' } })))
     const url = 'https://example.com/original.png'
     const response = await migrate({ request: remoteRequest([url], 'wechat') })
-    expect((await response.json()).results[0]).toMatchObject({ status: 'success', oldUrl: url, newUrl: url })
-    expect(storage.upload).not.toHaveBeenCalled()
+    expect((await response.json()).results[0]).toMatchObject({ status: 'success', oldUrl: url, newUrl: 'https://images.example/uploaded.png' })
+    expect(storage.upload).toHaveBeenCalledOnce()
     expect(storage.uploadMany).not.toHaveBeenCalled()
   })
 
   it('reuses the uploaded compressed copy across repeated WeChat requests', async () => {
     const png = await sharp({ create: { width: 32, height: 32, channels: 3, background: 'red' } }).png().toBuffer()
-    const bytes = new Uint8Array(MAX_WECHAT_IMAGE_BYTES + 1)
+    const bytes = new Uint8Array(MAX_UPLOAD_IMAGE_BYTES + 1)
     bytes.set(png)
     vi.stubGlobal('fetch', vi.fn().mockImplementation(() => new Response(bytes, { headers: { 'content-type': 'image/png' } })))
     const urls = ['https://example.com/large.png']
@@ -105,7 +172,7 @@ describe('image upload routes', () => {
     const urls = ['https://example.com/changing.png']
     const inputs = await Promise.all(['red', 'blue'].map(async (background) => {
       const png = await sharp({ create: { width: 32, height: 32, channels: 3, background } }).png().toBuffer()
-      const bytes = new Uint8Array(MAX_WECHAT_IMAGE_BYTES + 1)
+      const bytes = new Uint8Array(MAX_UPLOAD_IMAGE_BYTES + 1)
       bytes.set(png)
       return bytes
     }))
@@ -140,7 +207,7 @@ describe('image upload routes', () => {
   it('reports successful WeChat copies independently of another image upload failure', async () => {
     const images = await Promise.all(['red', 'blue'].map(async (background) => {
       const png = await sharp({ create: { width: 32, height: 32, channels: 3, background } }).png().toBuffer()
-      const bytes = new Uint8Array(MAX_WECHAT_IMAGE_BYTES + 1)
+      const bytes = new Uint8Array(MAX_UPLOAD_IMAGE_BYTES + 1)
       bytes.set(png)
       return bytes
     }))
@@ -152,6 +219,7 @@ describe('image upload routes', () => {
       }
       return { url: 'https://images.example/success.jpg' }
     })
+    storage.uploadMany.mockRejectedValueOnce(new Error('batch failed'))
     const response = await migrate({ request: remoteRequest(['https://example.com/failed.png', 'https://example.com/success.png'], 'wechat') })
     const { results } = await response.json()
     expect(results.find((result: { oldUrl: string }) => result.oldUrl.endsWith('failed.png')).status).toBe('failed')
@@ -160,7 +228,7 @@ describe('image upload routes', () => {
   })
   it('applies the WeChat 5MB target to both local and remote uploads', async () => {
     const png = await sharp({ create: { width: 32, height: 32, channels: 3, background: 'red' } }).png().toBuffer()
-    const bytes = new Uint8Array(MAX_WECHAT_IMAGE_BYTES + 1)
+    const bytes = new Uint8Array(MAX_UPLOAD_IMAGE_BYTES + 1)
     bytes.set(png)
     const form = new FormData()
     form.set('name', 'wechat.png')
@@ -168,7 +236,7 @@ describe('image upload routes', () => {
     form.set('target', 'wechat')
     const response = await upload({ request: new Request('http://localhost/api/upload/image', { method: 'POST', body: form }) })
     expect(response.status).toBe(200)
-    expect(storage.upload.mock.calls[0][0].file.size).toBeLessThanOrEqual(MAX_WECHAT_IMAGE_BYTES)
+    expect(storage.upload.mock.calls[0][0].file.size).toBeLessThanOrEqual(MAX_UPLOAD_IMAGE_BYTES)
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(bytes, { headers: { 'content-type': 'image/png' } })))
     const remote = await migrate({ request: remoteRequest(['https://example.com/wechat.png'], 'wechat') })
     expect((await remote.json()).results[0]).toMatchObject({ status: 'success' })
@@ -185,10 +253,13 @@ describe('image upload routes', () => {
     expect(response.status).toBe(400)
     expect(fetchMock).not.toHaveBeenCalled()
   })
-  it('accepts a local image exactly at 10MB unchanged', async () => {
+  it('accepts a compatible local image exactly at 4MiB unchanged', async () => {
+    const png = await sharp({ create: { width: 2, height: 2, channels: 3, background: 'red' } }).png().toBuffer()
+    const bytes = new Uint8Array(MAX_UPLOAD_IMAGE_BYTES)
+    bytes.set(png)
     const form = new FormData()
     form.set('name', 'original.png')
-    form.set('file', new Blob([new Uint8Array(MAX_UPLOAD_IMAGE_BYTES)], { type: 'image/png' }))
+    form.set('file', new Blob([bytes], { type: 'image/png' }))
     const response = await upload({ request: new Request('http://localhost/api/upload/image', { method: 'POST', body: form }) })
     expect(response.status).toBe(200)
     expect(storage.upload.mock.calls[0][0].file.size).toBe(MAX_UPLOAD_IMAGE_BYTES)
@@ -205,10 +276,11 @@ describe('image upload routes', () => {
     const localResponse = await upload({ request: new Request('http://localhost/api/upload/image', { method: 'POST', body: form }) })
     expect(localResponse.status).toBe(200)
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(bytes, { headers: { 'content-type': 'image/png' } })))
+    storage.cacheScope += '-remote'
     const response = await migrate({ request: remoteRequest(['https://example.com/large.png']) })
     expect(response.status).toBe(200)
     const local = storage.upload.mock.calls[0][0] as UploadOptions
-    const remote = storage.uploadMany.mock.calls[0][0][0] as UploadOptions
+    const remote = storage.upload.mock.calls[1][0] as UploadOptions
     expect(local.contentType).toBe('image/jpeg')
     expect(remote.filename).toBe('large.jpg')
     expect(await remote.file.arrayBuffer()).toEqual(await local.file.arrayBuffer())
@@ -220,7 +292,8 @@ describe('image upload routes', () => {
       if (url.endsWith('bad.png')) {
         return new Response(new Uint8Array(MAX_UPLOAD_IMAGE_BYTES + 1), { headers: { 'content-type': 'image/png' } })
       }
-      return new Response(new Uint8Array(10), { headers: { 'content-type': 'image/png' } })
+      const png = await sharp({ create: { width: 2, height: 2, channels: 3, background: url.endsWith('a.png') ? 'red' : url.endsWith('b.png') ? 'blue' : 'green' } }).png().toBuffer()
+      return new Response(new Uint8Array(png), { headers: { 'content-type': 'image/png' } })
     }))
     const urls = ['https://example.com/a.png', 'https://example.com/bad.png', 'https://example.com/b.png', 'https://example.com/c.png']
     const response = await migrate({ request: remoteRequest(urls) })
@@ -228,7 +301,7 @@ describe('image upload routes', () => {
     expect(results).toHaveLength(4)
     expect(results.find((result: { oldUrl: string }) => result.oldUrl === urls[1]))
       .toMatchObject({ status: 'failed', error: expect.stringContaining('暂不支持') })
-    expect(storage.uploadMany.mock.calls.map(([images]) => images.length)).toEqual([1, 2])
+    expect(storage.uploadMany.mock.calls.map(([images]) => images.length)).toEqual([3])
   })
 
   it('rejects a remote original above 50MB before reading the body', async () => {
@@ -248,7 +321,7 @@ describe('image upload routes', () => {
     expect(storage.upload).not.toHaveBeenCalled()
   })
 
-  it('proxies 10MB images and rejects a streamed image above that limit', async () => {
+  it('proxies 4MiB images and rejects a streamed image above that limit', async () => {
     const request = new Request('http://localhost/api/proxy/image?url=https://example.com/image.png')
     vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(new Response(new Uint8Array(MAX_UPLOAD_IMAGE_BYTES), { headers: { 'content-type': 'image/png' } }))
       .mockResolvedValueOnce(new Response(new Uint8Array(MAX_UPLOAD_IMAGE_BYTES + 1), { headers: { 'content-type': 'image/png' } })))

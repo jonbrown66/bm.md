@@ -1,6 +1,5 @@
-import type { ImageUploadTarget } from '@/lib/image-upload-policy'
 import { apiFetch } from '@/lib/api'
-import { MAX_SOURCE_IMAGE_BYTES, SOURCE_IMAGE_SIZE_ERROR } from '@/lib/image-upload-policy'
+import { MAX_SOURCE_IMAGE_BYTES, MAX_UPLOAD_IMAGE_BYTES, SOURCE_IMAGE_SIZE_ERROR, UPLOAD_PART_BYTES } from '@/lib/image-upload-policy'
 
 export interface UploadImageResponse {
   url: string
@@ -23,10 +22,39 @@ export async function uploadImage(formData: FormData): Promise<UploadImageRespon
     if (file instanceof Blob && file.size > MAX_SOURCE_IMAGE_BYTES) {
       throw new Error(SOURCE_IMAGE_SIZE_ERROR)
     }
-    return await apiFetch<UploadImageResponse>('/api/upload/image', {
+    if (file instanceof Blob && !file.type.startsWith('image/')) {
+      throw new Error('只支持上传图片文件')
+    }
+    if (!(file instanceof Blob) || file.size <= MAX_UPLOAD_IMAGE_BYTES) {
+      return await retryUploadRequest(() => apiFetch<UploadImageResponse>('/api/upload/image', {
+        method: 'POST',
+        body: formData,
+        signal: AbortSignal.timeout(120_000),
+      }))
+    }
+    const id = crypto.randomUUID()
+    const parts: string[] = []
+    for (let offset = 0; offset < file.size; offset += UPLOAD_PART_BYTES) {
+      const part = new FormData()
+      part.set('action', 'part')
+      part.set('file', file.slice(offset, offset + UPLOAD_PART_BYTES))
+      part.set('metadata', JSON.stringify({ id, index: parts.length, totalSize: file.size }))
+      const response = await retryUploadRequest(() => apiFetch<{ receipt: string }>('/api/upload/image', {
+        method: 'POST',
+        body: part,
+        signal: AbortSignal.timeout(60_000),
+      }))
+      if (!response.receipt) {
+        throw new Error('图片分片未返回上传凭据，请重试')
+      }
+      parts.push(response.receipt)
+    }
+    return await retryUploadRequest(() => apiFetch<UploadImageResponse>('/api/upload/image', {
       method: 'POST',
-      body: formData,
-    })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: formData.get('name'), contentType: file.type, parts }),
+      signal: AbortSignal.timeout(270_000),
+    }))
   }
   catch (error) {
     const message = getApiErrorMessage(error)
@@ -34,19 +62,39 @@ export async function uploadImage(formData: FormData): Promise<UploadImageRespon
   }
 }
 
-export async function uploadRemoteImages(urls: string[], target: ImageUploadTarget = 'default'): Promise<UploadRemoteImagesResponse> {
+export async function uploadRemoteImages(urls: string[]): Promise<UploadRemoteImagesResponse> {
   try {
-    return await apiFetch<UploadRemoteImagesResponse>('/api/upload/remote-images', {
+    return await retryUploadRequest(() => apiFetch<UploadRemoteImagesResponse>('/api/upload/remote-images', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ urls, target }),
-    })
+      body: JSON.stringify({ urls }),
+      signal: AbortSignal.timeout(270_000),
+    }))
   }
   catch (error) {
     const message = getApiErrorMessage(error)
     throw new Error(message || '批量上传图片失败')
+  }
+}
+
+/** 仅对暂时性的网络/服务错误重试，参数错误、认证错误和大小超限立即返回。 */
+async function retryUploadRequest<T>(request: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await request()
+    }
+    catch (error) {
+      const status = error && typeof error === 'object' && 'statusCode' in error ? error.statusCode : undefined
+      if (attempt >= 2 || (typeof status === 'number' && ![408, 429, 500, 502, 503, 504].includes(status))) {
+        throw error
+      }
+      if (!(error instanceof Error) || (!status && !['FetchError', 'TypeError', 'TimeoutError'].includes(error.name))) {
+        throw error
+      }
+      await new Promise(resolve => setTimeout(resolve, 500 * 2 ** attempt))
+    }
   }
 }
 
