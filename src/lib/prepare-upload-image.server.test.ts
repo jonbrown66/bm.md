@@ -128,4 +128,16 @@ describe('image upload preparation', () => {
     const result = await prepareUploadImage(options(pad(gif), 'image/gif', 'anim.gif'))
     expect(result.contentType).toBe('image/webp')
   })
+
+  it('compresses an oversized animated GIF for WeChat to 5MB or below', async () => {
+    const data = new Uint8Array(2 * 2 * 2 * 3)
+    data.fill(255, 0, 12)
+    const gif = await sharp(data, { raw: { width: 2, height: 4, channels: 3, pageHeight: 2 } })
+      .gif({ delay: [100, 100], loop: 0 })
+      .toBuffer()
+    const original = options(pad(gif, MAX_WECHAT_IMAGE_BYTES + 100), 'image/gif', 'oversized.gif')
+    const result = await prepareUploadImage(original, 'wechat')
+    expect(result.file.size).toBeLessThanOrEqual(MAX_WECHAT_IMAGE_BYTES)
+    expect(['image/gif', 'image/jpeg']).toContain(result.contentType)
+  })
 })

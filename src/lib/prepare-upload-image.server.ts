@@ -128,17 +128,36 @@ export async function prepareUploadImage(options: UploadOptions, target: ImageUp
       : (animated || metadata.hasAlpha ? 'webp' : 'jpg')
     const contentType = `image/${format === 'jpg' ? 'jpeg' : format}`
     const deadline = Date.now() + 30_000
-    const attempts = [
-      { scale: 1, quality: 90 },
-      ...(['jpg', 'webp'].includes(format)
-        ? [{ scale: 1, quality: 80 }, { scale: 1, quality: 70 }]
-        : []),
-      { scale: 0.8, quality: 75 },
-      { scale: 0.6, quality: 75 },
-      { scale: 0.4, quality: 75 },
-      { scale: 0.25, quality: 75 },
-      ...(wechat ? [{ scale: 0.15, quality: 75 }, { scale: 0.1, quality: 75 }] : []),
-    ]
+
+    const orientedWidth = !animated && (metadata.orientation ?? 0) >= 5 ? height : width
+    const orientedHeight = !animated && (metadata.orientation ?? 0) >= 5 ? width : height
+
+    // 微信公众号文章内容区域宽度不超过 677px。对于超大尺寸动图，按公众号适宜尺寸梯度递减，避免原尺寸计算超时或体积过大。
+    const maxAnimatedGifWidth = 900
+    const gifStartScale = (animated && format === 'gif' && orientedWidth > maxAnimatedGifWidth)
+      ? (maxAnimatedGifWidth / orientedWidth)
+      : 1
+
+    const attempts = (animated && format === 'gif')
+      ? [
+          { scale: gifStartScale, quality: 75 },
+          { scale: gifStartScale * 0.8, quality: 75 },
+          { scale: gifStartScale * 0.65, quality: 75 },
+          { scale: gifStartScale * 0.5, quality: 75 },
+          { scale: gifStartScale * 0.35, quality: 75 },
+          { scale: gifStartScale * 0.2, quality: 75 },
+        ]
+      : [
+          { scale: 1, quality: 90 },
+          ...(['jpg', 'webp'].includes(format)
+            ? [{ scale: 1, quality: 80 }, { scale: 1, quality: 70 }]
+            : []),
+          { scale: 0.8, quality: 75 },
+          { scale: 0.6, quality: 75 },
+          { scale: 0.4, quality: 75 },
+          { scale: 0.25, quality: 75 },
+          ...(wechat ? [{ scale: 0.15, quality: 75 }, { scale: 0.1, quality: 75 }] : []),
+        ]
 
     for (const { scale, quality } of attempts) {
       const remainingSeconds = Math.floor((deadline - Date.now()) / 1000)
@@ -149,8 +168,6 @@ export async function prepareUploadImage(options: UploadOptions, target: ImageUp
       if (!animated) {
         pipeline = pipeline.rotate()
       }
-      const orientedWidth = !animated && (metadata.orientation ?? 0) >= 5 ? height : width
-      const orientedHeight = !animated && (metadata.orientation ?? 0) >= 5 ? width : height
       const maxDimension = format === 'webp' ? 16383 : 65500
       pipeline = pipeline.resize({
         width: Math.min(maxDimension, Math.max(1, Math.floor(orientedWidth * scale))),
@@ -183,6 +200,33 @@ export async function prepareUploadImage(options: UploadOptions, target: ImageUp
         }
       }
     }
+
+    // 若动图在多次缩放后仍无法在保留动画时压至 5MB，保底转为首帧静态图压缩至 5MB 以下，确保公众号发布不被阻塞。
+    if (animated && wechat) {
+      try {
+        const fallbackPipeline = sharp(bytes, { limitInputPixels: maxAnimatedTotalPixels })
+          .rotate()
+          .resize({
+            width: Math.min(1920, orientedWidth),
+            height: Math.min(1920, orientedHeight),
+            fit: 'inside',
+            withoutEnlargement: true,
+          })
+          .jpeg({ quality: 80, chromaSubsampling: '4:4:4' })
+        const fallbackOutput = await fallbackPipeline.timeout({ seconds: 5 }).toBuffer()
+        if (fallbackOutput.byteLength <= maxBytes) {
+          return {
+            file: new Blob([new Uint8Array(fallbackOutput)], { type: 'image/jpeg' }),
+            filename: `${options.filename.replace(/\.[^.]*$/, '') || 'image'}.jpg`,
+            contentType: 'image/jpeg',
+          }
+        }
+      }
+      catch {
+        // 保底处理异常时继续向下抛出错误
+      }
+    }
+
     throw new ImageProcessingError(animated
       ? `无法在保留动画的情况下压缩至 ${sizeLabel}，请先手动压缩动图`
       : `无法压缩至 ${sizeLabel}，请先手动缩小图片`)
