@@ -4,10 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Route as proxyRoute } from '@/routes/api.proxy.image'
 import { Route as imageRoute } from '@/routes/api.upload.image'
 import { Route as remoteRoute } from '@/routes/api.upload.remote-images'
+import { StorageError } from '@/storage/types'
 import { MAX_SOURCE_IMAGE_BYTES, MAX_UPLOAD_IMAGE_BYTES, MAX_UPLOAD_REQUEST_BYTES, UPLOAD_PART_BYTES } from './image-upload-policy'
-import { uploadPreparedImage } from './prepare-upload-image.server'
+import { uploadPreparedImage, uploadPreparedImages } from './prepare-upload-image.server'
 
-const storage = vi.hoisted(() => ({ type: 'github' as const, upload: vi.fn(), uploadMany: vi.fn(), cacheScope: 'initial', createUploadBlob: vi.fn(), readUploadBlob: vi.fn(), isUploadedImageUrl: vi.fn() }))
+const storage = vi.hoisted(() => ({ type: 'github' as const, upload: vi.fn(), uploadMany: vi.fn(), cacheScope: 'initial', createUploadBlob: vi.fn(), readUploadBlob: vi.fn(), isUploadedImageUrl: vi.fn(), resolveUploadedImageUrl: vi.fn() }))
 let storageScopeIndex = 0
 vi.mock('@/storage', async importOriginal => ({
   ...await importOriginal<typeof import('@/storage')>(),
@@ -33,6 +34,7 @@ beforeEach(() => {
   storage.uploadMany.mockReset().mockImplementation(async (images: UploadOptions[]) =>
     images.map(image => ({ url: `https://images.example/${image.filename}` })))
   storage.isUploadedImageUrl.mockReset().mockReturnValue(false)
+  storage.resolveUploadedImageUrl.mockReset().mockImplementation(async (url: string) => url)
   storage.createUploadBlob.mockReset()
   storage.readUploadBlob.mockReset()
 })
@@ -42,16 +44,81 @@ afterEach(() => {
 })
 
 describe('image upload routes', () => {
-  it('reuses an already processed image URL without downloading or committing it', async () => {
+  it('checks and reuses a healthy processed image without decoding or committing it', async () => {
     storage.isUploadedImageUrl.mockReturnValue(true)
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
     const url = 'https://images.example/v2/already.gif'
     const response = await migrate({ request: remoteRequest([url]) })
     expect((await response.json()).results[0]).toMatchObject({ oldUrl: url, newUrl: url, status: 'success' })
+    expect(storage.resolveUploadedImageUrl).toHaveBeenCalledWith(url)
     expect(fetchMock).not.toHaveBeenCalled()
     expect(storage.upload).not.toHaveBeenCalled()
     expect(storage.uploadMany).not.toHaveBeenCalled()
+  })
+  it('repairs a failed processed CDN link using the verified origin without reuploading', async () => {
+    storage.isUploadedImageUrl.mockReturnValue(true)
+    const oldUrl = 'https://images.example/v2/already.gif'
+    const newUrl = 'https://raw.githubusercontent.com/example/images/main/images/v2/already.gif'
+    storage.resolveUploadedImageUrl.mockResolvedValue(newUrl)
+    const response = await migrate({ request: remoteRequest([oldUrl]) })
+    expect((await response.json()).results[0]).toEqual({ oldUrl, newUrl, status: 'success' })
+    expect(storage.upload).not.toHaveBeenCalled()
+    expect(storage.uploadMany).not.toHaveBeenCalled()
+  })
+  it('reports a failed existing link when neither CDN nor origin is usable', async () => {
+    storage.isUploadedImageUrl.mockReturnValue(true)
+    storage.resolveUploadedImageUrl.mockRejectedValue(new StorageError('图片外链暂时不可用', 'github'))
+    const oldUrl = 'https://images.example/v2/missing.gif'
+    const response = await migrate({ request: remoteRequest([oldUrl]) })
+    expect((await response.json()).results[0]).toMatchObject({ oldUrl, status: 'failed', error: expect.stringContaining('外链暂时不可用') })
+    expect(storage.upload).not.toHaveBeenCalled()
+  })
+  it('does not report or cache a new upload as successful until its public URL works', async () => {
+    const image = { file: new Blob(['prepared']), filename: 'copy.png', contentType: 'image/png' }
+    storage.resolveUploadedImageUrl.mockRejectedValueOnce(new StorageError('图片外链暂时不可用', 'github'))
+    await expect(uploadPreparedImage(image, storage)).rejects.toThrow('外链暂时不可用')
+    expect(storage.upload).toHaveBeenCalledOnce()
+    await expect(uploadPreparedImage(image, storage)).resolves.toEqual({ url: 'https://images.example/uploaded.png' })
+    expect(storage.upload).toHaveBeenCalledTimes(2)
+  })
+  it('rechecks a cached URL and repairs it without another storage write', async () => {
+    const image = { file: new Blob(['prepared']), filename: 'copy.png', contentType: 'image/png' }
+    await uploadPreparedImage(image, storage)
+    const repaired = 'https://raw.githubusercontent.com/example/images/main/copy.png'
+    storage.resolveUploadedImageUrl.mockResolvedValueOnce(repaired)
+    await expect(uploadPreparedImage(image, storage)).resolves.toEqual({ url: repaired })
+    expect(storage.resolveUploadedImageUrl).toHaveBeenCalledTimes(2)
+    expect(storage.upload).toHaveBeenCalledOnce()
+  })
+  it('reuploads from available image bytes only if a cached link cannot be recovered', async () => {
+    const image = { file: new Blob(['prepared']), filename: 'copy.png', contentType: 'image/png' }
+    await uploadPreparedImage(image, storage)
+    storage.resolveUploadedImageUrl.mockRejectedValueOnce(new StorageError('图片外链暂时不可用', 'github'))
+    await expect(uploadPreparedImage(image, storage)).resolves.toEqual({ url: 'https://images.example/uploaded.png' })
+    expect(storage.upload).toHaveBeenCalledTimes(2)
+    expect(storage.resolveUploadedImageUrl).toHaveBeenCalledTimes(3)
+  })
+  it('keeps healthy batch results when one public URL fails without rewriting the batch', async () => {
+    const images = ['failed', 'healthy'].map(value => ({ file: new Blob([value]), filename: `${value}.png`, contentType: 'image/png' }))
+    storage.resolveUploadedImageUrl.mockImplementation(async (url: string) => {
+      if (url.endsWith('failed.png'))
+        throw new StorageError('图片外链暂时不可用', 'github')
+      return url
+    })
+    const results = await uploadPreparedImages(images, storage)
+    expect(results[0]).toMatchObject({ status: 'rejected', reason: expect.objectContaining({ message: expect.stringContaining('外链暂时不可用') }) })
+    expect(results[1]).toEqual({ status: 'fulfilled', value: { url: 'https://images.example/healthy.png' } })
+    expect(storage.uploadMany).toHaveBeenCalledOnce()
+    expect(storage.upload).not.toHaveBeenCalled()
+    await expect(uploadPreparedImage(images[1], storage)).resolves.toEqual({ url: 'https://images.example/healthy.png' })
+    expect(storage.upload).not.toHaveBeenCalled()
+  })
+  it('also verifies public links when the provider does not enable caching', async () => {
+    const provider = { type: storage.type, upload: storage.upload, resolveUploadedImageUrl: storage.resolveUploadedImageUrl }
+    storage.resolveUploadedImageUrl.mockRejectedValue(new StorageError('图片外链暂时不可用', 'github'))
+    await expect(uploadPreparedImage({ file: new Blob(['prepared']), filename: 'copy.png', contentType: 'image/png' }, provider)).rejects.toThrow('外链暂时不可用')
+    expect(storage.upload).toHaveBeenCalledOnce()
   })
   it('uploads a large animated image through bounded requests and preserves all frames after assembly', async () => {
     vi.stubEnv('GITHUB_IMAGE_TOKEN', 'unit-test-signing-key')

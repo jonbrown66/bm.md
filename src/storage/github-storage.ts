@@ -6,7 +6,8 @@ import type { StorageProvider, UploadOptions, UploadResult } from './types'
 import { Buffer } from 'node:buffer'
 import { createHash } from 'node:crypto'
 import { env } from '@/env'
-import { readLimitedBody, UPLOAD_PART_BYTES } from '@/lib/image-upload-policy'
+import { detectImageContentType } from '@/lib/image-content'
+import { MAX_UPLOAD_IMAGE_BYTES, readLimitedBody, UPLOAD_PART_BYTES } from '@/lib/image-upload-policy'
 import { StorageError } from './types'
 
 interface GitHubContentResponse {
@@ -200,10 +201,77 @@ export class GitHubStorage implements StorageProvider {
     return `${normalizePath(this.getConfig().basePath || 'images')}/v2/${hash}.${getSafeExtension(options.filename)}`
   }
 
-  isUploadedImageUrl(url: string): boolean {
+  private getUploadedImageKey(url: string): string | undefined {
     const config = this.getConfig()
-    const prefix = `${buildGitHubImageUrl({ ...config, key: `${normalizePath(config.basePath || 'images')}/v2` })}/`
-    return url.startsWith(prefix) && /^[a-f0-9]{64}\.(?:jpg|png|gif)$/.test(url.slice(prefix.length))
+    const directory = `${normalizePath(config.basePath || 'images')}/v2`
+    // 源站回退地址也属于已处理图片，下次上传时仍可直接检查和复用。
+    for (const publicBaseUrl of [config.publicBaseUrl, undefined]) {
+      const prefix = `${buildGitHubImageUrl({ ...config, publicBaseUrl, key: directory })}/`
+      const filename = url.slice(prefix.length)
+      if (url.startsWith(prefix) && /^[a-f0-9]{64}\.(?:jpg|png|gif)$/.test(filename)) {
+        return `${directory}/${filename}`
+      }
+    }
+  }
+
+  isUploadedImageUrl(url: string): boolean {
+    return this.getUploadedImageKey(url) !== undefined
+  }
+
+  private async isImageAvailable(url: string, key: string): Promise<boolean> {
+    const expectedHash = key.split('/').at(-1)!.split('.')[0]
+    for (let attempt = 0; attempt < 2; attempt++) {
+      this.signal?.throwIfAborted()
+      let delay = 500
+      try {
+        // 公共外链检查不携带 GitHub 凭证；读取完整响应，避免把错误页或截断图片当成成功。
+        const response = await fetch(url, {
+          headers: { Accept: 'image/*' },
+          signal: this.signal ? AbortSignal.any([this.signal, AbortSignal.timeout(5_000)]) : AbortSignal.timeout(5_000),
+        })
+        if (response.ok) {
+          const bytes = new Uint8Array(await readLimitedBody(response, MAX_UPLOAD_IMAGE_BYTES))
+          this.signal?.throwIfAborted()
+          return Boolean(detectImageContentType(bytes))
+            && createHash('sha256').update(bytes).digest('hex') === expectedHash
+        }
+        await response.body?.cancel()
+        const retryAfter = Number(response.headers.get('retry-after') || 0)
+        if (![404, 408, 429, 500, 502, 503, 504].includes(response.status) || retryAfter > 2) {
+          return false
+        }
+        delay = Math.max(delay, retryAfter * 1000)
+      }
+      catch (error) {
+        this.signal?.throwIfAborted()
+        if (!(error instanceof TypeError || (error instanceof DOMException && error.name === 'TimeoutError'))) {
+          return false
+        }
+      }
+      if (attempt === 0) {
+        await new Promise(resolve => setTimeout(resolve, delay))
+      }
+    }
+    return false
+  }
+
+  async resolveUploadedImageUrl(url: string): Promise<string> {
+    const config = this.getConfig()
+    const key = this.getUploadedImageKey(url)
+    if (!key) {
+      throw new StorageError('图片链接不属于当前图床的已处理图片', 'github')
+    }
+    const candidates = new Set([
+      url,
+      buildGitHubImageUrl({ ...config, key }),
+      buildGitHubImageUrl({ ...config, key, publicBaseUrl: undefined }),
+    ])
+    for (const candidate of candidates) {
+      if (await this.isImageAvailable(candidate, key)) {
+        return candidate
+      }
+    }
+    throw new StorageError('图片外链暂时不可用，请稍后重试一键上传', 'github')
   }
 
   async upload(options: UploadOptions): Promise<UploadResult> {

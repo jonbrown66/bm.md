@@ -19,9 +19,15 @@ const uploadQueues = new Map<string, Promise<void>>()
 
 /** 同内容合并上传，新增图片批量提交；缓存只记录成功结果。 */
 export async function uploadPreparedImages(options: UploadOptions[], storage: StorageProvider): Promise<PromiseSettledResult<UploadResult>[]> {
+  const verify = async (result: UploadResult): Promise<UploadResult> => {
+    if (!result.url) {
+      throw new ImageProcessingError('存储服务未返回图片链接', 500)
+    }
+    return { url: storage.resolveUploadedImageUrl ? await storage.resolveUploadedImageUrl(result.url) : result.url }
+  }
   const scope = storage.cacheScope
   if (!scope) {
-    return Promise.allSettled(options.map(image => storage.upload(image)))
+    return Promise.allSettled(options.map(async image => verify(await storage.upload(image))))
   }
   const owned: { key: string, image: UploadOptions, resolve: (result: UploadResult) => void, reject: (error: unknown) => void }[] = []
   const jobs = await Promise.all(options.map(async (image) => {
@@ -30,7 +36,14 @@ export async function uploadPreparedImages(options: UploadOptions[], storage: St
     const key = JSON.stringify([scope, image.contentType, hash])
     const cached = uploadedCopies.get(key)
     if (cached && cached.expiresAt > Date.now()) {
-      return { promise: Promise.resolve({ url: cached.url }) }
+      try {
+        const result = await verify(cached)
+        cached.url = result.url
+        return { promise: Promise.resolve(result) }
+      }
+      catch {
+        // 已有副本无法恢复时，使用当前请求持有的图片内容重新上传。
+      }
     }
     uploadedCopies.delete(key)
     const pending = pendingCopies.get(key)
@@ -45,18 +58,22 @@ export async function uploadPreparedImages(options: UploadOptions[], storage: St
   if (!owned.length) {
     return results
   }
-  const finish = (job: typeof owned[number], result: UploadResult) => {
-    if (!result.url) {
-      throw new ImageProcessingError('存储服务未返回图片链接', 500)
-    }
-    if (uploadedCopies.size >= maxCachedCopies) {
-      const oldestKey = uploadedCopies.keys().next().value
-      if (oldestKey !== undefined) {
-        uploadedCopies.delete(oldestKey)
+  const finish = async (job: typeof owned[number], result: UploadResult) => {
+    try {
+      const verified = await verify(result)
+      if (uploadedCopies.size >= maxCachedCopies) {
+        const oldestKey = uploadedCopies.keys().next().value
+        if (oldestKey !== undefined) {
+          uploadedCopies.delete(oldestKey)
+        }
       }
+      uploadedCopies.set(job.key, { url: verified.url, expiresAt: Date.now() + copyCacheLifetime })
+      job.resolve(verified)
     }
-    uploadedCopies.set(job.key, { url: result.url, expiresAt: Date.now() + copyCacheLifetime })
-    job.resolve(result)
+    catch (error) {
+      // 写入已成功时，外链故障只影响此图片，不触发整批重复写入。
+      job.reject(error)
+    }
   }
   const previous = uploadQueues.get(scope) ?? Promise.resolve()
   const settled = previous.then(async () => {
@@ -66,12 +83,12 @@ export async function uploadPreparedImages(options: UploadOptions[], storage: St
         if (uploaded.length !== owned.length || uploaded.some(result => !result.url)) {
           throw new ImageProcessingError('存储服务未返回完整图片链接', 500)
         }
-        owned.forEach((job, index) => finish(job, uploaded[index]))
+        await Promise.all(owned.map((job, index) => finish(job, uploaded[index])))
       }
       else {
         for (const job of owned) {
           try {
-            finish(job, await storage.upload(job.image))
+            await finish(job, await storage.upload(job.image))
           }
           catch (error) {
             job.reject(error)
@@ -83,7 +100,7 @@ export async function uploadPreparedImages(options: UploadOptions[], storage: St
       // 批量提交失败时逐项恢复，避免单张错误丢掉其他图片的成功结果。
       for (const job of owned) {
         try {
-          finish(job, await storage.upload(job.image))
+          await finish(job, await storage.upload(job.image))
         }
         catch (failure) {
           job.reject(failure)

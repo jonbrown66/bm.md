@@ -35,6 +35,8 @@ export interface StorageProvider {
   readUploadBlob?: (sha: string) => Promise<ArrayBuffer>
   /** 判断本图床已经按当前策略处理过的内容寻址图片。 */
   isUploadedImageUrl?: (url: string) => boolean
+  /** 验证已处理图片的外链；正常时保留原地址，失效时返回经验证的备用地址。 */
+  resolveUploadedImageUrl?: (url: string) => Promise<string>
 }
 
 /** 存储错误类，包含 provider 标识 */

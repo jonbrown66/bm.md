@@ -37,7 +37,8 @@ async function downloadRemoteImage(oldUrl: string, storage: StorageProvider, sig
       return { oldUrl, status: 'failed', error: '只支持 http/https 图片链接' }
     }
     if (storage.isUploadedImageUrl?.(oldUrl)) {
-      return { oldUrl, newUrl: oldUrl, status: 'success' }
+      const newUrl = storage.resolveUploadedImageUrl ? await storage.resolveUploadedImageUrl(oldUrl) : oldUrl
+      return { oldUrl, newUrl, status: 'success' }
     }
 
     let response: Response | undefined

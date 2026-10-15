@@ -1,3 +1,4 @@
+import { Buffer } from 'node:buffer'
 import { createHash } from 'node:crypto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -198,6 +199,95 @@ describe('github storage helpers', () => {
     process.env.GITHUB_IMAGE_OWNER = 'example'
     process.env.GITHUB_IMAGE_REPO = 'images'
   }
+
+  describe('public image availability', () => {
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aIj8AAAAASUVORK5CYII=', 'base64')
+    const hash = createHash('sha256').update(png).digest('hex')
+    const cdn = `https://img.example.com/images/v2/${hash}.png`
+    const origin = `https://raw.githubusercontent.com/example/images/main/images/v2/${hash}.png`
+    const imageResponse = () => new Response(new Uint8Array(png), { headers: { 'content-type': 'image/png' } })
+    const storage = () => {
+      configure()
+      process.env.GITHUB_IMAGE_PUBLIC_BASE_URL = 'https://img.example.com'
+      return new GitHubStorage()
+    }
+
+    it('keeps a healthy CDN URL and never sends credentials to public image hosts', async () => {
+      const request = vi.fn().mockImplementation(imageResponse)
+      vi.stubGlobal('fetch', request)
+      await expect(storage().resolveUploadedImageUrl(cdn)).resolves.toBe(cdn)
+      expect(request).toHaveBeenCalledOnce()
+      expect(new Headers(request.mock.calls[0][1].headers).has('authorization')).toBe(false)
+      expect(request.mock.calls[0][1].method).toBeUndefined()
+    })
+
+    it('retries a transient CDN 503 and keeps the original link after recovery', async () => {
+      const request = vi.fn().mockResolvedValueOnce(new Response('', { status: 503 })).mockImplementation(imageResponse)
+      vi.stubGlobal('fetch', request)
+      await expect(storage().resolveUploadedImageUrl(cdn)).resolves.toBe(cdn)
+      expect(request.mock.calls.map(([url]) => url)).toEqual([cdn, cdn])
+    })
+
+    it.each([503, 404])('falls back to a verified origin after repeated CDN %i responses', async (status) => {
+      const request = vi.fn().mockImplementation((url: string) => url === cdn ? new Response('', { status }) : imageResponse())
+      vi.stubGlobal('fetch', request)
+      const provider = storage()
+      await expect(provider.resolveUploadedImageUrl(cdn)).resolves.toBe(origin)
+      expect(request.mock.calls.map(([url]) => url)).toEqual([cdn, cdn, origin])
+      expect(provider.isUploadedImageUrl(origin)).toBe(true)
+    })
+
+    it('keeps a healthy origin fallback instead of replacing it with the CDN', async () => {
+      const request = vi.fn().mockImplementation(imageResponse)
+      vi.stubGlobal('fetch', request)
+      await expect(storage().resolveUploadedImageUrl(origin)).resolves.toBe(origin)
+      expect(request.mock.calls.map(([url]) => url)).toEqual([origin])
+    })
+
+    it('rejects when CDN and origin both fail instead of returning an unverified URL', async () => {
+      const request = vi.fn().mockImplementation(() => new Response('', { status: 503 }))
+      vi.stubGlobal('fetch', request)
+      await expect(storage().resolveUploadedImageUrl(cdn)).rejects.toThrow('图片外链暂时不可用')
+      expect(request.mock.calls.map(([url]) => url)).toEqual([cdn, cdn, origin, origin])
+    })
+
+    it.each(['error page', 'different image', 'oversized image'])('does not accept a 200 response containing %s', async (failure) => {
+      const request = vi.fn().mockImplementation((url: string) => {
+        if (url === origin)
+          return imageResponse()
+        if (failure === 'oversized image')
+          return new Response('', { headers: { 'content-length': String(5 * 1024 * 1024) } })
+        return new Response(failure === 'error page' ? '<html>Service Unavailable</html>' : new Uint8Array([...png, 1]), { headers: { 'content-type': 'image/png' } })
+      })
+      vi.stubGlobal('fetch', request)
+      await expect(storage().resolveUploadedImageUrl(cdn)).resolves.toBe(origin)
+      expect(request.mock.calls.map(([url]) => url)).toEqual([cdn, origin])
+    })
+
+    it('does not retry a permanent failure or wait through a long Retry-After', async () => {
+      const request = vi.fn().mockResolvedValueOnce(new Response('', { status: 403 })).mockResolvedValueOnce(new Response('', { status: 429, headers: { 'retry-after': '30' } }))
+      vi.stubGlobal('fetch', request)
+      await expect(storage().resolveUploadedImageUrl(cdn)).rejects.toThrow('外链暂时不可用')
+      expect(request.mock.calls.map(([url]) => url)).toEqual([cdn, origin])
+    })
+
+    it('rejects foreign URLs before making any request', async () => {
+      const request = vi.fn()
+      vi.stubGlobal('fetch', request)
+      await expect(storage().resolveUploadedImageUrl(cdn.replace('img.example.com', 'other.example.com'))).rejects.toThrow('不属于当前图床')
+      expect(request).not.toHaveBeenCalled()
+    })
+
+    it('stops before fetching when the overall upload was cancelled', async () => {
+      storage()
+      const controller = new AbortController()
+      controller.abort()
+      const request = vi.fn()
+      vi.stubGlobal('fetch', request)
+      await expect(new GitHubStorage(controller.signal).resolveUploadedImageUrl(cdn)).rejects.toThrow()
+      expect(request).not.toHaveBeenCalled()
+    })
+  })
   it('recognizes only current-policy content-addressed URLs from this destination', () => {
     configure()
     const storage = new GitHubStorage()
