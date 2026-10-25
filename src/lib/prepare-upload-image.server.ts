@@ -1,16 +1,15 @@
 import type { StorageProvider, UploadOptions, UploadResult } from '@/storage/types'
 import { detectImageContentType } from './image-content'
 import {
+  IMAGE_PROCESSING_TIMEOUT_MS,
   ImageProcessingError,
+  MAX_ANIMATED_IMAGE_PIXELS,
+  MAX_IMAGE_FRAME_PIXELS,
   MAX_SOURCE_IMAGE_BYTES,
   MAX_UPLOAD_IMAGE_BYTES,
   SOURCE_IMAGE_SIZE_ERROR,
 } from './image-upload-policy'
 
-/** 单帧图片最大像素（约 4000 万像素，如 8000x5000）。 */
-const maxFramePixels = 40_000_000
-/** 限制全部动画帧的解码量，避免多图并发耗尽服务端内存。 */
-const maxAnimatedTotalPixels = 120_000_000
 const maxCachedCopies = 128
 const copyCacheLifetime = 10 * 60 * 1000
 const uploadedCopies = new Map<string, { url: string, expiresAt: number }>()
@@ -51,6 +50,7 @@ export async function uploadPreparedImages(options: UploadOptions[], storage: St
       return { promise: pending }
     }
     const promise = new Promise<UploadResult>((resolve, reject) => owned.push({ key, image, resolve, reject }))
+      .finally(() => pendingCopies.delete(key))
     pendingCopies.set(key, promise)
     return { promise }
   }))
@@ -83,12 +83,13 @@ export async function uploadPreparedImages(options: UploadOptions[], storage: St
         if (uploaded.length !== owned.length || uploaded.some(result => !result.url)) {
           throw new ImageProcessingError('存储服务未返回完整图片链接', 500)
         }
-        await Promise.all(owned.map((job, index) => finish(job, uploaded[index])))
+        // 队列只串行写入；外链验证由各图片的 pending promise 等待。
+        owned.forEach((job, index) => void finish(job, uploaded[index]))
       }
       else {
         for (const job of owned) {
           try {
-            await finish(job, await storage.upload(job.image))
+            void finish(job, await storage.upload(job.image))
           }
           catch (error) {
             job.reject(error)
@@ -100,15 +101,12 @@ export async function uploadPreparedImages(options: UploadOptions[], storage: St
       // 批量提交失败时逐项恢复，避免单张错误丢掉其他图片的成功结果。
       for (const job of owned) {
         try {
-          await finish(job, await storage.upload(job.image))
+          void finish(job, await storage.upload(job.image))
         }
         catch (failure) {
           job.reject(failure)
         }
       }
-    }
-    finally {
-      owned.forEach(job => pendingCopies.delete(job.key))
     }
   })
   uploadQueues.set(scope, settled)
@@ -165,7 +163,7 @@ export async function prepareUploadImage(options: UploadOptions): Promise<Upload
     // 元数据校验不会重新编码小图；确需转换时才执行压缩。
     const { default: sharp } = await import('sharp')
     sharp.cache({ memory: 32, files: 0, items: 20 })
-    const metadata = await sharp(bytes, { limitInputPixels: maxAnimatedTotalPixels }).metadata()
+    const metadata = await sharp(bytes, { limitInputPixels: MAX_ANIMATED_IMAGE_PIXELS }).metadata()
     if (options.file.size <= maxBytes && ['image/jpeg', 'image/png', 'image/gif'].includes(type)) {
       return { ...options, contentType: type, filename: `${options.filename.replace(/\.[^.]*$/, '') || 'image'}.${type === 'image/jpeg' ? 'jpg' : type.split('/')[1]}` }
     }
@@ -173,17 +171,32 @@ export async function prepareUploadImage(options: UploadOptions): Promise<Upload
     const width = metadata.width
     const height = metadata.pageHeight ?? metadata.height
     const framePixels = (width ?? 0) * (height ?? 0)
-    if (!width || !height || framePixels > maxFramePixels) {
+    if (!width || !height || framePixels > MAX_IMAGE_FRAME_PIXELS) {
       throw new ImageProcessingError('图片单帧分辨率过大（超过 4000 万像素），请先缩小图片尺寸')
     }
-    if (pages > 1 && framePixels * pages > maxAnimatedTotalPixels) {
-      throw new ImageProcessingError('动图全部帧超过 1.2 亿像素，请先缩小动图尺寸或减少帧数')
-    }
-
     const animated = pages > 1
     const format = animated ? 'gif' : metadata.hasAlpha ? 'png' : 'jpg'
     const contentType = `image/${format === 'jpg' ? 'jpeg' : format}`
-    const deadline = Date.now() + 30_000
+    const deadline = Date.now() + (animated && type === 'image/gif' ? IMAGE_PROCESSING_TIMEOUT_MS : 30_000)
+    const compressLargeGif = async (): Promise<UploadOptions> => {
+      const { compressGif } = await import('./compress-gif.server')
+      const output = await compressGif(bytes, { maxBytes, deadline })
+      const result = await sharp(output, { limitInputPixels: MAX_IMAGE_FRAME_PIXELS }).metadata()
+      if (!result.width || !result.height || result.format !== 'gif' || output.byteLength > maxBytes) {
+        throw new ImageProcessingError('动图自动压缩结果无效')
+      }
+      return {
+        file: new Blob([new Uint8Array(output)], { type: 'image/gif' }),
+        filename: `${options.filename.replace(/\.[^.]*$/, '') || 'image'}.gif`,
+        contentType: 'image/gif',
+      }
+    }
+    if (animated && framePixels * pages > MAX_ANIMATED_IMAGE_PIXELS) {
+      if (type === 'image/gif') {
+        return await compressLargeGif()
+      }
+      throw new ImageProcessingError('动图解码量过大，暂不支持自动处理此格式')
+    }
 
     const orientedWidth = !animated && (metadata.orientation ?? 0) >= 5 ? height : width
     const orientedHeight = !animated && (metadata.orientation ?? 0) >= 5 ? width : height
@@ -216,12 +229,13 @@ export async function prepareUploadImage(options: UploadOptions): Promise<Upload
           { scale: 0.1, quality: 75 },
         ]
 
+    const sharpDeadline = animated && type === 'image/gif' ? Math.min(deadline, Date.now() + 30_000) : deadline
     for (const { scale, quality } of attempts) {
-      const remainingSeconds = Math.floor((deadline - Date.now()) / 1000)
+      const remainingSeconds = Math.floor((sharpDeadline - Date.now()) / 1000)
       if (remainingSeconds < 1) {
         break
       }
-      let pipeline = sharp(bytes, { animated, limitInputPixels: maxAnimatedTotalPixels })
+      let pipeline = sharp(bytes, { animated, limitInputPixels: MAX_ANIMATED_IMAGE_PIXELS })
       if (!animated) {
         pipeline = pipeline.rotate()
       }
@@ -245,7 +259,16 @@ export async function prepareUploadImage(options: UploadOptions): Promise<Upload
       const attemptTimeoutSeconds = animated
         ? Math.min(25, remainingSeconds)
         : Math.min(10, remainingSeconds)
-      const output = await pipeline.timeout({ seconds: Math.max(1, attemptTimeoutSeconds) }).toBuffer()
+      let output: Uint8Array
+      try {
+        output = await pipeline.timeout({ seconds: Math.max(1, attemptTimeoutSeconds) }).toBuffer()
+      }
+      catch (error) {
+        if (animated && type === 'image/gif') {
+          return await compressLargeGif()
+        }
+        throw error
+      }
       if (output.byteLength <= maxBytes) {
         return {
           file: new Blob([new Uint8Array(output)], { type: contentType }),
@@ -255,6 +278,9 @@ export async function prepareUploadImage(options: UploadOptions): Promise<Upload
       }
     }
 
+    if (animated && type === 'image/gif') {
+      return await compressLargeGif()
+    }
     throw new ImageProcessingError(animated
       ? `无法在保留动画的情况下压缩至 ${sizeLabel}，请先手动压缩动图`
       : `无法压缩至 ${sizeLabel}，请先手动缩小图片`)

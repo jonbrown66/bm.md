@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto'
+import { GIFEncoder } from 'gifenc'
 import sharp from 'sharp'
 import { describe, expect, it } from 'vitest'
 import { MAX_SOURCE_IMAGE_BYTES, MAX_UPLOAD_IMAGE_BYTES } from './image-upload-policy'
@@ -134,6 +135,58 @@ describe('image upload preparation', () => {
     expect(result.contentType).toBe('image/gif')
     expect(await sharp(await result.file.arrayBuffer(), { animated: true }).metadata()).toMatchObject({ pages: frames, loop: 2 })
   }, 60_000)
+
+  it('passes through a compatible GIF above 120M total pixels without decoding all frames', async () => {
+    const encoder = GIFEncoder()
+    const index = new Uint8Array(640 * 480)
+    for (let frame = 0; frame < 400; frame++) {
+      index.fill(frame % 2)
+      encoder.writeFrame(index, 640, 480, { palette: [[255, 255, 255], [0, 0, 0]], delay: 30, repeat: 2 })
+    }
+    encoder.finish()
+    const original = options(encoder.bytes(), 'image/gif', 'compatible.gif')
+    expect(await (await prepareUploadImage(original)).file.arrayBuffer()).toEqual(await original.file.arrayBuffer())
+  })
+
+  it('automatically compresses an animation above 120M total pixels instead of rejecting it', async () => {
+    const width = 640
+    const height = 480
+    const frames = 400
+    const encoder = GIFEncoder()
+    const index = new Uint8Array(width * height)
+    const palette = Array.from({ length: 64 }, (_, color) => [
+      (color & 3) * 85,
+      ((color >> 2) & 3) * 85,
+      ((color >> 4) & 3) * 85,
+    ])
+    let state = 12345
+    for (let frame = 0; frame < frames; frame++) {
+      index.fill(63)
+      for (let y = 0; y < 140; y++) {
+        for (let x = 0; x < 140; x++) {
+          state = (Math.imul(state, 1664525) + 1013904223) >>> 0
+          index[(100 + y) * width + 100 + x] = state >>> 26
+        }
+      }
+      encoder.writeFrame(index, width, height, { palette, delay: 30, repeat: 2 })
+    }
+    encoder.finish()
+    const gif = encoder.bytes()
+    expect(width * height * frames).toBeGreaterThan(120_000_000)
+    expect(gif.byteLength).toBeGreaterThan(MAX_UPLOAD_IMAGE_BYTES)
+    const metadata = await sharp(gif).metadata()
+    const startedAt = performance.now()
+    const result = await prepareUploadImage(options(gif, 'image/gif', 'whiteboard-demo.gif'))
+    const output = await sharp(await result.file.arrayBuffer()).metadata()
+    expect(result.contentType).toBe('image/gif')
+    expect(result.filename).toBe('whiteboard-demo.gif')
+    expect(result.file.size).toBeLessThanOrEqual(MAX_UPLOAD_IMAGE_BYTES)
+    expect(output.pages).toBeGreaterThan(1)
+    expect(output.pages).toBeLessThan(frames)
+    expect(output.loop).toBe(metadata.loop)
+    expect(output.delay?.reduce((total, delay) => total + delay, 0)).toBe(frames * 30)
+    console.info(`120M+ GIF: ${frames} frames -> ${output.pages} frames, ${result.file.size} bytes, ${Math.round(performance.now() - startedAt)}ms`)
+  }, 90_000)
 
   it('compresses a real noisy GIF larger than 5MB while retaining its animation', async () => {
     const frames = 128

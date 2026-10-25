@@ -5,6 +5,8 @@ import { z } from 'zod'
 import { env } from '@/env'
 import { ImageProcessingError, MAX_SOURCE_IMAGE_BYTES, MAX_UPLOAD_IMAGE_BYTES, UPLOAD_PART_BYTES } from './image-upload-policy'
 
+const MAX_CONCURRENT_PART_READS = 3
+
 const receiptSchema = z.object({
   id: z.string().uuid(),
   index: z.number().int().min(0).max(Math.ceil(MAX_SOURCE_IMAGE_BYTES / UPLOAD_PART_BYTES) - 1),
@@ -67,13 +69,25 @@ export async function assembleImageParts(tokens: string[], storage: StorageProvi
     throw new ImageProcessingError('图片分片顺序或大小不一致，请重新上传', 400)
   }
   const bytes = new Uint8Array(first.totalSize)
-  // 小分片逐个读取，避免同时持有所有 Base64 响应。
-  for (const part of receipts) {
-    const chunk = await storage.readUploadBlob(part.sha)
-    if (chunk.byteLength !== part.size) {
-      throw new ImageProcessingError('图片分片内容不完整，请重新上传', 400)
+  const readUploadBlob = storage.readUploadBlob.bind(storage)
+  let nextIndex = 0
+  let stopped = false
+  // 限制回读并按索引写入，避免同时缓冲所有分片；失败后停止领取，后续拒绝由 Promise.all 处理。
+  await Promise.all(Array.from({ length: Math.min(MAX_CONCURRENT_PART_READS, receipts.length) }, async () => {
+    while (!stopped && nextIndex < receipts.length) {
+      const part = receipts[nextIndex++]
+      try {
+        const chunk = await readUploadBlob(part.sha)
+        if (chunk.byteLength !== part.size) {
+          throw new ImageProcessingError('图片分片内容不完整，请重新上传', 400)
+        }
+        bytes.set(new Uint8Array(chunk), part.index * UPLOAD_PART_BYTES)
+      }
+      catch (error) {
+        stopped = true
+        throw error
+      }
     }
-    bytes.set(new Uint8Array(chunk), part.index * UPLOAD_PART_BYTES)
-  }
+  }))
   return new Blob([bytes])
 }

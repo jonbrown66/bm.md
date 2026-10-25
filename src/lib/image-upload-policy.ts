@@ -6,6 +6,17 @@ export const MAX_REMOTE_IMAGE_COUNT = 30
 export const REMOTE_UPLOAD_BATCH_SIZE = 6
 export const MAX_SOURCE_IMAGE_BYTES = 50 * 1024 * 1024
 export const SOURCE_IMAGE_SIZE_ERROR = '原始图片不能超过 50MB，请先缩小图片'
+export const MAX_IMAGE_FRAME_PIXELS = 40_000_000
+export const MAX_ANIMATED_IMAGE_PIXELS = 120_000_000
+export const IMAGE_PROCESSING_TIMEOUT_MS = 90_000
+export const GIF_WORKING_MEMORY_BYTES = 256 * 1024 * 1024
+export const MAX_GIF_OUTPUT_PIXELS = 1_000_000
+export const GIF_COMPRESSION_PROFILES = [
+  { width: 900, fps: 15, colors: 256 },
+  { width: 720, fps: 10, colors: 128 },
+  { width: 480, fps: 6, colors: 64 },
+  { width: 320, fps: 3, colors: 32 },
+] as const
 
 export class ImageProcessingError extends Error {
   constructor(message: string, public readonly status = 422) {

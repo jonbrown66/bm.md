@@ -18,10 +18,20 @@ const storage: StorageProvider = {
   },
   readUploadBlob: async sha => new Uint8Array(blobs.get(sha)!).buffer,
 }
-async function receipts() {
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason: unknown) => void
+  const promise = new Promise<T>((onResolve, onReject) => {
+    resolve = onResolve
+    reject = onReject
+  })
+  return { promise, resolve, reject }
+}
+
+async function receipts(source = bytes) {
   const parts: string[] = []
-  for (let index = 0; index < 3; index++) {
-    parts.push(await stageImagePart(new Blob([bytes.slice(index * UPLOAD_PART_BYTES, (index + 1) * UPLOAD_PART_BYTES)]), { id, index, totalSize: bytes.length }, storage))
+  for (let index = 0; index < Math.ceil(source.length / UPLOAD_PART_BYTES); index++) {
+    parts.push(await stageImagePart(new Blob([source.slice(index * UPLOAD_PART_BYTES, (index + 1) * UPLOAD_PART_BYTES)]), { id, index, totalSize: source.length }, storage))
   }
   return parts
 }
@@ -43,6 +53,64 @@ describe('signed image upload parts', () => {
     expect(await restored.arrayBuffer()).toEqual(bytes.buffer)
     expect(parts.join('')).not.toContain('unit-test-secret')
     expect(storage.upload).not.toHaveBeenCalled()
+  })
+  it('limits pending blob reads to three and assembles by index despite out-of-order completion', async () => {
+    const source = new Uint8Array(4 * UPLOAD_PART_BYTES + 10)
+    for (let index = 0; index < 5; index++) {
+      source.fill(index + 1, index * UPLOAD_PART_BYTES, (index + 1) * UPLOAD_PART_BYTES)
+    }
+    const parts = await receipts(source)
+    const chunks = [...blobs.values()]
+    const indices = new Map([...blobs.keys()].map((sha, index) => [sha, index]))
+    const pending = Array.from({ length: 5 }, () => deferred<ArrayBuffer>())
+    let active = 0
+    let peak = 0
+    const read = vi.fn((sha: string) => {
+      active++
+      peak = Math.max(peak, active)
+      return pending[indices.get(sha)!].promise.finally(() => active--)
+    })
+    const result = assembleImageParts(parts, { ...storage, readUploadBlob: read })
+    let completed = false
+    void result.then(() => completed = true)
+    expect(read).toHaveBeenCalledTimes(3)
+    expect(active).toBe(3)
+    pending[2].resolve(new Uint8Array(chunks[2]).buffer)
+    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(4))
+    expect(active).toBe(3)
+    pending[3].resolve(new Uint8Array(chunks[3]).buffer)
+    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(5))
+    expect(active).toBe(3)
+    pending[4].resolve(new Uint8Array(chunks[4]).buffer)
+    pending[1].resolve(new Uint8Array(chunks[1]).buffer)
+    await vi.waitFor(() => expect(active).toBe(1))
+    expect(completed).toBe(false)
+    pending[0].resolve(new Uint8Array(chunks[0]).buffer)
+    const restored = await result
+    expect(peak).toBe(3)
+    expect(read.mock.calls.map(([sha]) => indices.get(sha))).toEqual([0, 1, 2, 3, 4])
+    expect(await restored.arrayBuffer()).toEqual(source.buffer)
+  })
+  it.each(['read error', 'truncated'])('stops new reads after a %s and handles later in-flight failures', async (mode) => {
+    const parts = await receipts(new Uint8Array(4 * UPLOAD_PART_BYTES + 10))
+    const chunks = [...blobs.values()]
+    const indices = new Map([...blobs.keys()].map((sha, index) => [sha, index]))
+    const pending = Array.from({ length: 3 }, () => deferred<ArrayBuffer>())
+    const read = vi.fn((sha: string) => pending[indices.get(sha)!].promise)
+    const result = assembleImageParts(parts, { ...storage, readUploadBlob: read })
+    const rejection = expect(result).rejects.toThrow(mode === 'truncated' ? '不完整' : 'first failure')
+    expect(read).toHaveBeenCalledTimes(3)
+    if (mode === 'truncated') {
+      pending[0].resolve(new ArrayBuffer(1))
+    }
+    else {
+      pending[0].reject(new Error('first failure'))
+    }
+    await rejection
+    pending[1].resolve(new Uint8Array(chunks[1]).buffer)
+    pending[2].reject(new Error('later failure'))
+    await Promise.allSettled(pending.map(part => part.promise))
+    expect(read).toHaveBeenCalledTimes(3)
   })
   it('rejects altered receipts before reading any private blob', async () => {
     const parts = await receipts()

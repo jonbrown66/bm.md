@@ -1,6 +1,8 @@
 import { apiFetch } from '@/lib/api'
 import { MAX_SOURCE_IMAGE_BYTES, MAX_UPLOAD_IMAGE_BYTES, SOURCE_IMAGE_SIZE_ERROR, UPLOAD_PART_BYTES } from '@/lib/image-upload-policy'
 
+const MAX_CONCURRENT_PART_UPLOADS = 3
+
 export interface UploadImageResponse {
   url: string
 }
@@ -33,22 +35,36 @@ export async function uploadImage(formData: FormData): Promise<UploadImageRespon
       }))
     }
     const id = crypto.randomUUID()
+    const partCount = Math.ceil(file.size / UPLOAD_PART_BYTES)
     const parts: string[] = []
-    for (let offset = 0; offset < file.size; offset += UPLOAD_PART_BYTES) {
-      const part = new FormData()
-      part.set('action', 'part')
-      part.set('file', file.slice(offset, offset + UPLOAD_PART_BYTES))
-      part.set('metadata', JSON.stringify({ id, index: parts.length, totalSize: file.size }))
-      const response = await retryUploadRequest(() => apiFetch<{ receipt: string }>('/api/upload/image', {
-        method: 'POST',
-        body: part,
-        signal: AbortSignal.timeout(60_000),
-      }))
-      if (!response.receipt) {
-        throw new Error('图片分片未返回上传凭据，请重试')
+    let nextIndex = 0
+    let stopped = false
+    // 按索引保存凭据；失败后停止领取新片，Promise.all 会接住已发出任务的后续失败。
+    await Promise.all(Array.from({ length: Math.min(MAX_CONCURRENT_PART_UPLOADS, partCount) }, async () => {
+      while (!stopped && nextIndex < partCount) {
+        const index = nextIndex++
+        try {
+          const offset = index * UPLOAD_PART_BYTES
+          const part = new FormData()
+          part.set('action', 'part')
+          part.set('file', file.slice(offset, offset + UPLOAD_PART_BYTES))
+          part.set('metadata', JSON.stringify({ id, index, totalSize: file.size }))
+          const response = await retryUploadRequest(() => apiFetch<{ receipt: string }>('/api/upload/image', {
+            method: 'POST',
+            body: part,
+            signal: AbortSignal.timeout(60_000),
+          }))
+          if (!response.receipt) {
+            throw new Error('图片分片未返回上传凭据，请重试')
+          }
+          parts[index] = response.receipt
+        }
+        catch (error) {
+          stopped = true
+          throw error
+        }
       }
-      parts.push(response.receipt)
-    }
+    }))
     return await retryUploadRequest(() => apiFetch<UploadImageResponse>('/api/upload/image', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

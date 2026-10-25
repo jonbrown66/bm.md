@@ -20,6 +20,16 @@ const upload = (imageRoute.options.server?.handlers as { POST: Handler }).POST
 const migrate = (remoteRoute.options.server?.handlers as { POST: Handler }).POST
 const proxy = (proxyRoute.options.server?.handlers as { GET: Handler }).GET
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason: unknown) => void
+  const promise = new Promise<T>((onResolve, onReject) => {
+    resolve = onResolve
+    reject = onReject
+  })
+  return { promise, resolve, reject }
+}
+
 function remoteRequest(urls: string[], target = 'default') {
   return new Request('http://localhost/api/upload/remote-images', {
     method: 'POST',
@@ -30,6 +40,7 @@ function remoteRequest(urls: string[], target = 'default') {
 
 beforeEach(() => {
   storage.cacheScope = `test-${++storageScopeIndex}`
+  vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Unexpected external request in upload route test')))
   storage.upload.mockReset().mockResolvedValue({ url: 'https://images.example/uploaded.png' })
   storage.uploadMany.mockReset().mockImplementation(async (images: UploadOptions[]) =>
     images.map(image => ({ url: `https://images.example/${image.filename}` })))
@@ -73,6 +84,76 @@ describe('image upload routes', () => {
     const response = await migrate({ request: remoteRequest([oldUrl]) })
     expect((await response.json()).results[0]).toMatchObject({ oldUrl, status: 'failed', error: expect.stringContaining('外链暂时不可用') })
     expect(storage.upload).not.toHaveBeenCalled()
+  })
+  it.each(['single', 'batch', 'fallback'] as const)('releases the %s write queue while keeping verification and identical content pending', async (mode) => {
+    const images = ['first', 'peer', 'next'].map(value => ({ file: new Blob([value]), filename: `${value}.png`, contentType: 'image/png' }))
+    const firstUrl = 'https://images.example/first.png'
+    const verification = deferred<string>()
+    storage.upload.mockImplementation(async (image: UploadOptions) => ({ url: `https://images.example/${image.filename}` }))
+    storage.resolveUploadedImageUrl.mockImplementation(async (url: string) => url === firstUrl ? verification.promise : url)
+    if (mode === 'fallback') {
+      storage.uploadMany.mockRejectedValueOnce(new Error('batch failed'))
+    }
+    const initialImages = mode === 'single' ? images.slice(0, 1) : images.slice(0, 2)
+    const first = uploadPreparedImages(initialImages, storage)
+    const firstSettled = vi.fn()
+    void first.then(firstSettled)
+    const requests = [first]
+    try {
+      await vi.waitFor(() => expect(storage.resolveUploadedImageUrl).toHaveBeenCalledWith(firstUrl))
+      const shared = uploadPreparedImages([images[0], images[2]], storage)
+      const sharedSettled = vi.fn()
+      void shared.then(sharedSettled)
+      requests.push(shared)
+      // 新图开始验证，证明此请求已完成去重与写入；首图的验证仍未放行。
+      await vi.waitFor(() => expect(storage.resolveUploadedImageUrl).toHaveBeenCalledWith('https://images.example/next.png'))
+      expect(firstSettled).not.toHaveBeenCalled()
+      expect(sharedSettled).not.toHaveBeenCalled()
+      expect(storage.uploadMany).toHaveBeenCalledTimes(mode === 'single' ? 0 : 1)
+      const writes = mode === 'batch' ? [images[2]] : mode === 'fallback' ? images : [images[0], images[2]]
+      expect(storage.upload.mock.calls.map(([image]) => image)).toEqual(writes)
+      expect(storage.resolveUploadedImageUrl.mock.calls.filter(([url]) => url === firstUrl)).toHaveLength(1)
+      verification.resolve(firstUrl)
+      expect(await first).toEqual(initialImages.map(image => ({ status: 'fulfilled', value: { url: `https://images.example/${image.filename}` } })))
+      expect(await shared).toEqual([images[0], images[2]].map(image => ({ status: 'fulfilled', value: { url: `https://images.example/${image.filename}` } })))
+    }
+    finally {
+      verification.resolve(firstUrl)
+      await Promise.all(requests)
+    }
+  })
+  it('shares a pending verification failure without caching it and allows a new write on retry', async () => {
+    const images = ['failed', 'next'].map(value => ({ file: new Blob([value]), filename: `${value}.png`, contentType: 'image/png' }))
+    const failedUrl = 'https://images.example/failed.png'
+    const verification = deferred<string>()
+    const failure = new StorageError('图片外链暂时不可用', 'github')
+    storage.upload.mockImplementation(async (image: UploadOptions) => ({ url: `https://images.example/${image.filename}` }))
+    storage.resolveUploadedImageUrl.mockImplementation(async (url: string) => url === failedUrl ? verification.promise : url)
+    const first = uploadPreparedImages([images[0]], storage)
+    const requests = [first]
+    try {
+      await vi.waitFor(() => expect(storage.resolveUploadedImageUrl).toHaveBeenCalledWith(failedUrl))
+      const shared = uploadPreparedImages(images, storage)
+      requests.push(shared)
+      await vi.waitFor(() => expect(storage.resolveUploadedImageUrl).toHaveBeenCalledWith('https://images.example/next.png'))
+      verification.reject(failure)
+      expect(await first).toEqual([{ status: 'rejected', reason: failure }])
+      expect(await shared).toEqual([
+        { status: 'rejected', reason: failure },
+        { status: 'fulfilled', value: { url: 'https://images.example/next.png' } },
+      ])
+      expect(storage.upload).toHaveBeenCalledTimes(2)
+      expect(storage.uploadMany).not.toHaveBeenCalled()
+      storage.resolveUploadedImageUrl.mockImplementation(async (url: string) => url)
+      await expect(uploadPreparedImage(images[0], storage)).resolves.toEqual({ url: failedUrl })
+      expect(storage.upload).toHaveBeenCalledTimes(3)
+      await expect(uploadPreparedImage(images[0], storage)).resolves.toEqual({ url: failedUrl })
+      expect(storage.upload).toHaveBeenCalledTimes(3)
+    }
+    finally {
+      verification.resolve(failedUrl)
+      await Promise.all(requests)
+    }
   })
   it('does not report or cache a new upload as successful until its public URL works', async () => {
     const image = { file: new Blob(['prepared']), filename: 'copy.png', contentType: 'image/png' }
